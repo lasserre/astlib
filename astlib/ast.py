@@ -1,0 +1,162 @@
+import json
+from pathlib import Path
+from typing import Dict, List, Any, Tuple, Callable
+from .astvisitor import *
+from .astviewer import ASTViewer, NodeAttrs
+
+_ast_class_by_name = {}
+
+def _new_astnode_class_from_dict(d:Dict):
+    '''
+    Creates a new class derived from ASTNode with a classname matching
+    the 'kind' field in the dictionary (e.g. VarDecl, FunctionDecl, etc.)
+    '''
+    if d['kind'] in _ast_class_by_name:
+        return _ast_class_by_name[d['kind']]
+
+    def _handle_attached_types(self:'NewClass'):
+        if self.kind == 'ConstantArrayType':
+            self.__class__.size = property(lambda self: self.inner[0].size * self.num_elements)
+        if self.kind == 'CStyleCastExpr':
+            self.dtype = _new_astnode_class_from_dict(self.dtype)(self.dtype)
+            self.dtype.parent = self
+            self.dtype.is_parent_attached = True
+        elif self.kind == 'FieldDecl':
+            self.dtype = _new_astnode_class_from_dict(self.dtype)(self.dtype)
+            self.dtype.parent = self
+            self.dtype.is_parent_attached = True
+        elif self.kind == 'FunctionDecl':
+            self.return_dtype = _new_astnode_class_from_dict(self.return_dtype)(self.return_dtype)
+            self.return_dtype.parent = self
+            self.return_dtype.is_parent_attached = True
+        elif self.kind == 'FunctionType':
+            self.return_dtype = _new_astnode_class_from_dict(self.return_dtype)(self.return_dtype)
+            self.return_dtype.parent = self
+            self.return_dtype.is_parent_attached = True
+        elif self.kind == 'VarDecl' or self.kind == 'ParmVarDecl':
+            self.dtype = _new_astnode_class_from_dict(self.dtype)(self.dtype)
+            self.dtype.parent = self
+            self.dtype.is_parent_attached = True
+        elif self.kind == 'RecordDecl':
+            # same thing as StructType, except all we lack here is the name
+            # (we don't really use RecordDecl other than validation)
+            if not hasattr(self.__class__, 'name'):
+                self.__class__.name = property(lambda self: self._struct_def.name)
+        elif self.kind == 'StructType':
+            # pass everything through to self._struct_def
+            # default value, we expect this to be overwritten
+            self._struct_def = StructDef('NO_STRUCTDEF', -1, [])
+            if not hasattr(self.__class__, 'name'):
+                self.__class__.name = property(lambda self: self._struct_def.name)
+                self.__class__.size = property(lambda self: self._struct_def.size)
+                self.__class__.fields = property(lambda self: self._struct_def.fields)
+                self.__class__.fields_by_offset = property(lambda self: self._struct_def.fields_by_offset)
+        elif self.kind == 'TypedefType':
+            self.__class__.size = property(lambda self: self.decl.inner[0].size)
+
+    class NewClass(ASTNode):
+        def __init__(self, data:Dict):
+            self.__dict__.update(data)
+            if 'inner' in self.__dict__:
+                # self.__dict__['inner'] = [_new_astnode_class_from_dict(child)(child) for child in self.__dict__['inner']]
+                self.inner = [_new_astnode_class_from_dict(x)(x) for x in self.inner]
+                for child in self.inner:
+                    child.parent = self
+                    child.is_parent_attached = False
+            else:
+                self.inner = []
+
+            _handle_attached_types(self)
+
+        def render(self, format='pdf', outfolder=Path.cwd(), ast_name:str='',
+                    fontname:str='Cascadia Code',
+                    format_node:Callable[[ASTNode,NodeAttrs],Any]=None):
+            return ASTViewer(format_node).render_ast(self, format, outfolder, ast_name, fontname)
+
+        def dtype_str(self):
+            return DatatypePrinter().to_string(self)
+
+        def has_types(self, node_types:List[str], has_any:bool=True):
+            return HasNodeTypesVisitor(node_types, has_any).visit(self)
+
+        def nodes_at_addr(self, addr:int) -> List[ASTNode]:
+            return GetNodesAtAddr(addr).visit(self)
+
+    NewClass.__name__ = d['kind']
+    NewClass.__qualname__ = d['kind']
+    _ast_class_by_name[d['kind']] = NewClass
+    return NewClass
+
+class StructField:
+    '''
+    Represents information about a structure field
+    '''
+    def __init__(self, name:str, offset:int, dtype:ASTNode) -> None:
+        self.name = name
+        self.offset = offset
+        self.dtype = dtype
+
+class StructDef:
+    '''
+    Since StructType is a thin wrapper around the sid, we need a separate type
+    to represent the definition of the struct in the structures_by_id dictionary
+    '''
+    def __init__(self, name:str, sid:int, fields_by_offset:Dict[int, StructField]) -> None:
+        self.name = name
+        self.sid = sid
+        self.fields_by_offset = fields_by_offset
+
+    @property
+    def fields(self) -> List[StructField]:
+        return [self.fields_by_offset[k] for k in sorted(self.fields_by_offset.keys())]
+
+    @property
+    def size(self) -> int:
+        return sum([f.dtype.size for f in self.fields_by_offset.values()])
+
+class UnionDef:
+    '''
+    Same as StructDef, but for unions (because we can't map fields by offset)
+    '''
+    def __init__(self, name:str, sid:int, fields:List[StructField]) -> None:
+        self.name = name
+        self.sid = sid
+        self.fields = fields
+
+def create_struct_def(sdict:dict, sid:int):
+    fields_by_offset = {}
+    if sdict['fields']:
+        for offset, fdict in sdict['fields'].items():
+            dtype_dict = fdict['dtype']
+            dtype = _new_astnode_class_from_dict(dtype_dict)(dtype_dict)
+            fields_by_offset[int(offset)] = StructField(fdict['name'], offset, dtype)
+    return StructDef(sdict['name'], sid, fields_by_offset)
+
+def create_union_def(sdict:dict, sid:int):
+    fields = []
+    if sdict['fields']:
+        for fdict in sdict['fields']:
+            dtype_dict = fdict['dtype']
+            dtype = _new_astnode_class_from_dict(dtype_dict)(dtype_dict)
+            fields.append(StructField(fdict['name'], 0, dtype))
+    return UnionDef(sdict['name'], sid, fields)
+
+def convert_structures_by_id(structs_by_id:Dict) -> Dict[int, StructDef]:
+    structs = {}
+    for sid, sdict in structs_by_id.items():
+        structs[int(sid)] = create_union_def(sdict, sid) if sdict['is_union'] else \
+                            create_struct_def(sdict, sid)
+    return structs
+
+def dict_to_ast(d:dict) -> Tuple[ASTNode, Dict[int, StructDef]]:
+    if d['kind'] != 'TranslationUnitDecl':
+        raise Exception(f'Expected dict to be a translation unit, found "{d["kind"]}" instead')
+    ast = _new_astnode_class_from_dict(d)(d)
+    struct_lib = convert_structures_by_id(d['structures_by_id'])
+    StructTypeAndValueDeclLookup(struct_lib).extract(ast, save_result=True)
+    return (ast, struct_lib)
+
+def json_to_ast(json_file:Path):
+    with open(json_file) as f:
+        data = json.load(f)
+    return dict_to_ast(data)
