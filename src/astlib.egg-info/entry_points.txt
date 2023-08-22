@@ -1,6 +1,0 @@
-[console_scripts]
-bcdiff = astlib.scripts.bcdiff:main
-diff_asts = astlib.scripts.diff_asts:main
-print_ast = astlib.scripts.print_ast:main
-report_ast_export = astlib.scripts.report_ast_export:main
-run_validation = astlib.scripts.run_validation:main

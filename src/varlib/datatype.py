@@ -8,7 +8,7 @@ class DataTypeCategories:
     Union = 'UNION'
 
     @staticmethod
-    def as_list() -> List[str]:
+    def get_list() -> List[str]:
         return [DataTypeCategories.BuiltIn,
                 DataTypeCategories.Pointer,
                 DataTypeCategories.Array,
@@ -39,11 +39,11 @@ class BuiltinType(DataType):
     void is also considered a built-in type with a size of 0
     '''
     def __init__(self, name:str,
-                 is_floating_point:bool, is_signed:bool, size:int) -> None:
+                 floating_point:bool, signed:bool, size:int) -> None:
         super().__init__(DataTypeCategories.BuiltIn)
         self.name = name
-        self.is_floating_point = is_floating_point
-        self.is_signed = is_signed
+        self.floating_point = floating_point
+        self.signed = signed
         self._size = size
 
     @property

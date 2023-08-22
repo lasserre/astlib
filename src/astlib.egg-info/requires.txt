@@ -1,4 +1,0 @@
-pyelftools
-pandas
-rich
-graphviz

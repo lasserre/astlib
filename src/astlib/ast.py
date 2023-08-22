@@ -1,10 +1,39 @@
 import json
 from pathlib import Path
 from typing import Dict, List, Any, Tuple, Callable
+
 from .astvisitor import *
 from .astviewer import ASTViewer, NodeAttrs
 
+from varlib import datatype, location
+
 _ast_class_by_name = {}
+
+_space_mapping = {
+    'register': 'reg'
+}
+
+def to_varlib_location(node:ASTNode) -> location.Location:
+    if not hasattr(node, 'loc_space'):
+        return None
+
+    if node.loc_space not in _space_mapping:
+        raise Exception(f'Unhandled AST loc_space "{node.loc_space}"')
+
+    loc_type = _space_mapping[node.loc_space]
+    return location.Location(loc_type, node.loc_reg, node.loc_off)
+
+def to_varlib_dtype(node:ASTNode) -> datatype.DataType:
+    '''
+    Converts the AST Type node to its corresponding varlib data type, or
+    returns None if the node is not a data type node.
+    '''
+    if node.kind == 'BuiltinType':
+        return datatype.BuiltinType(node.name, node.is_floating_point, node.is_signed, node.size)
+    elif node.kind.endswith('Type'):
+        raise Exception(f'Unhandled AST type node "{node.kind}"')
+
+    return None     # not a data type AST node
 
 def _new_astnode_class_from_dict(d:Dict):
     '''
@@ -81,6 +110,15 @@ def _new_astnode_class_from_dict(d:Dict):
 
         def nodes_at_addr(self, addr:int) -> List[ASTNode]:
             return GetNodesAtAddr(addr).visit(self)
+
+        @property
+        def dtype_varlib(self) -> datatype.DataType:
+            '''Returns the varlib data type if this node is Type node, otherwise None'''
+            return to_varlib_dtype(self)
+
+        @property
+        def location(self) -> location.Location:
+            return to_varlib_location(self)
 
     NewClass.__name__ = d['kind']
     NewClass.__qualname__ = d['kind']
