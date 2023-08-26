@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Any, Dict
 
 class DataTypeCategories:
     BuiltIn = 'BUILTIN'
@@ -92,14 +92,24 @@ class ArrayType(DataType):
     def size(self):
         return self.num_elements * self.element_type.size
 
+class StructField:
+    '''
+    Do we want to call these fields or members? would be good to be consistent...
+    '''
+    def __init__(self, dtype:DataType, name:str='') -> None:
+        self.dtype = dtype
+        self.name = name
+
 class StructType(DataType):
     '''
     Structure types
     '''
-    def __init__(self) -> None:
+    def __init__(self, fields_by_offset:Dict[int, StructField], name:str='') -> None:
         super().__init__(DataTypeCategories.Struct)
+        self.fields_by_offset = fields_by_offset
+        self.name = name
 
-# TODO: I think unions should be treated as their own type...
+# NOTE: I think unions should be treated as their own type...
 # since we care so much about offsets in structure recovery,
 # unions are handled quite differently since everything is at
 # offset = 0.
@@ -108,5 +118,7 @@ class UnionType(DataType):
     '''
     Union types
     '''
-    def __init__(self) -> None:
+    def __init__(self, fields:List[StructField], name:str='') -> None:
         super().__init__(DataTypeCategories.Union)
+        self.fields = fields
+        self.name = name

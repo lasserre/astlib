@@ -30,6 +30,13 @@ def to_varlib_dtype(node:ASTNode) -> datatype.DataType:
     '''
     if node.kind == 'BuiltinType':
         return datatype.BuiltinType(node.name, node.is_floating_point, node.is_signed, node.size)
+    elif node.kind == 'PointerType':
+        return datatype.PointerType(pointed_to=to_varlib_dtype(node.inner[0]), pointer_size=node.size)
+    elif node.kind == 'StructType':
+        for off, f in node.fields_by_offset.items():
+            print(f.dtype)
+        dt_fields = {off: datatype.StructField(to_varlib_dtype(f.dtype), f.name) for off, f in node.fields_by_offset.items()}
+        return datatype.StructType(dt_fields, node.name)
     elif node.kind.endswith('Type'):
         raise Exception(f'Unhandled AST type node "{node.kind}"')
 
@@ -125,7 +132,7 @@ def _new_astnode_class_from_dict(d:Dict):
     _ast_class_by_name[d['kind']] = NewClass
     return NewClass
 
-class StructField:
+class FieldDef:
     '''
     Represents information about a structure field
     '''
@@ -139,13 +146,13 @@ class StructDef:
     Since StructType is a thin wrapper around the sid, we need a separate type
     to represent the definition of the struct in the structures_by_id dictionary
     '''
-    def __init__(self, name:str, sid:int, fields_by_offset:Dict[int, StructField]) -> None:
+    def __init__(self, name:str, sid:int, fields_by_offset:Dict[int, FieldDef]) -> None:
         self.name = name
         self.sid = sid
         self.fields_by_offset = fields_by_offset
 
     @property
-    def fields(self) -> List[StructField]:
+    def fields(self) -> List[FieldDef]:
         return [self.fields_by_offset[k] for k in sorted(self.fields_by_offset.keys())]
 
     @property
@@ -156,7 +163,7 @@ class UnionDef:
     '''
     Same as StructDef, but for unions (because we can't map fields by offset)
     '''
-    def __init__(self, name:str, sid:int, fields:List[StructField]) -> None:
+    def __init__(self, name:str, sid:int, fields:List[FieldDef]) -> None:
         self.name = name
         self.sid = sid
         self.fields = fields
@@ -167,7 +174,7 @@ def create_struct_def(sdict:dict, sid:int):
         for offset, fdict in sdict['fields'].items():
             dtype_dict = fdict['dtype']
             dtype = _new_astnode_class_from_dict(dtype_dict)(dtype_dict)
-            fields_by_offset[int(offset)] = StructField(fdict['name'], offset, dtype)
+            fields_by_offset[int(offset)] = FieldDef(fdict['name'], offset, dtype)
     return StructDef(sdict['name'], sid, fields_by_offset)
 
 def create_union_def(sdict:dict, sid:int):
@@ -176,7 +183,7 @@ def create_union_def(sdict:dict, sid:int):
         for fdict in sdict['fields']:
             dtype_dict = fdict['dtype']
             dtype = _new_astnode_class_from_dict(dtype_dict)(dtype_dict)
-            fields.append(StructField(fdict['name'], 0, dtype))
+            fields.append(FieldDef(fdict['name'], 0, dtype))
     return UnionDef(sdict['name'], sid, fields)
 
 def convert_structures_by_id(structs_by_id:Dict) -> Dict[int, StructDef]:
