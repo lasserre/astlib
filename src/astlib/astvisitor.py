@@ -145,7 +145,11 @@ class StructTypeAndValueDeclLookup(VisitAllChildrenByDefaultVisitor):
         rd._struct_def = self.struct_lib[rd.sid]
 
     def visit_StructType(self, node:ASTNode):
-        node._struct_def = self.struct_lib[node.sid]
+        if node._struct_def.sid == -1:
+            # only visit this StructType if it hasn't yet been visited
+            node._struct_def = self.struct_lib[node.sid]
+            for f in node.fields:
+                self.visit(f.dtype)
 
     def visit_TypedefDecl(self, tddecl:ASTNode):
         if not self._save_mode:

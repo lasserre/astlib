@@ -10,7 +10,8 @@ from varlib import datatype, location
 _ast_class_by_name = {}
 
 _space_mapping = {
-    'register': 'reg'
+    'register': location.LocationType.Register,
+    'stack': location.LocationType.Stack,
 }
 
 def to_varlib_location(node:ASTNode) -> location.Location:
@@ -23,7 +24,7 @@ def to_varlib_location(node:ASTNode) -> location.Location:
     loc_type = _space_mapping[node.loc_space]
     return location.Location(loc_type, node.loc_reg, node.loc_off)
 
-def to_varlib_dtype(node:ASTNode) -> datatype.DataType:
+def to_varlib_dtype(node:ASTNode, parent:datatype.DataType=None) -> datatype.DataType:
     '''
     Converts the AST Type node to its corresponding varlib data type, or
     returns None if the node is not a data type node.
@@ -31,12 +32,28 @@ def to_varlib_dtype(node:ASTNode) -> datatype.DataType:
     if node.kind == 'BuiltinType':
         return datatype.BuiltinType(node.name, node.is_floating_point, node.is_signed, node.size)
     elif node.kind == 'PointerType':
-        return datatype.PointerType(pointed_to=to_varlib_dtype(node.inner[0]), pointer_size=node.size)
+        ptype = datatype.PointerType(None, node.size, parent)
+        ptype.pointed_to = to_varlib_dtype(node.inner[0], parent=ptype)
+        return ptype
     elif node.kind == 'StructType':
-        for off, f in node.fields_by_offset.items():
-            print(f.dtype)
-        dt_fields = {off: datatype.StructField(to_varlib_dtype(f.dtype), f.name) for off, f in node.fields_by_offset.items()}
-        return datatype.StructType(dt_fields, node.name)
+        if node.is_union:
+            return datatype.UnionType(node.fields, node.name, parent)
+        else:
+            pnode = parent
+            while pnode is not None:
+                if pnode.category == datatype.DataTypeCategories.Struct and pnode.name == node.name:
+                    return datatype.RecursiveStructType(pnode, parent)
+                pnode = pnode.parent
+            stype = datatype.StructType({}, node.name, parent)
+            dt_fields = {off: datatype.StructField(to_varlib_dtype(f.dtype, stype), f.name) for off, f in node.fields_by_offset.items()}
+            stype.fields_by_offset = dt_fields
+            return stype
+    elif node.kind == 'ConstantArrayType':
+        atype = datatype.ArrayType(None, num_elements=node.num_elements, parent=parent)
+        atype.element_type = to_varlib_dtype(node.inner[0], parent=atype)
+        return atype
+    elif node.kind == 'VoidType':
+        return datatype.BuiltinType('void', False, False, 0)
     elif node.kind.endswith('Type'):
         raise Exception(f'Unhandled AST type node "{node.kind}"')
 
@@ -86,7 +103,8 @@ def _new_astnode_class_from_dict(d:Dict):
                 self.__class__.name = property(lambda self: self._struct_def.name)
                 self.__class__.size = property(lambda self: self._struct_def.size)
                 self.__class__.fields = property(lambda self: self._struct_def.fields)
-                self.__class__.fields_by_offset = property(lambda self: self._struct_def.fields_by_offset)
+                self.__class__.fields_by_offset = property(
+                    lambda self: self._struct_def.fields_by_offset if not self.is_union else None)
         elif self.kind == 'TypedefType':
             self.__class__.size = property(lambda self: self.decl.inner[0].size)
 
@@ -152,6 +170,10 @@ class StructDef:
         self.fields_by_offset = fields_by_offset
 
     @property
+    def is_union(self):
+        return False
+
+    @property
     def fields(self) -> List[FieldDef]:
         return [self.fields_by_offset[k] for k in sorted(self.fields_by_offset.keys())]
 
@@ -168,6 +190,10 @@ class UnionDef:
         self.sid = sid
         self.fields = fields
 
+    @property
+    def is_union(self):
+        return True
+
 def create_struct_def(sdict:dict, sid:int):
     fields_by_offset = {}
     if sdict['fields']:
@@ -175,7 +201,7 @@ def create_struct_def(sdict:dict, sid:int):
             dtype_dict = fdict['dtype']
             dtype = _new_astnode_class_from_dict(dtype_dict)(dtype_dict)
             fields_by_offset[int(offset)] = FieldDef(fdict['name'], offset, dtype)
-    return StructDef(sdict['name'], sid, fields_by_offset)
+    return StructDef(sdict['name'], int(sid), fields_by_offset)
 
 def create_union_def(sdict:dict, sid:int):
     fields = []
