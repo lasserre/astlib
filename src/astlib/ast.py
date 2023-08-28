@@ -18,6 +18,11 @@ def to_varlib_location(node:ASTNode) -> location.Location:
     if not hasattr(node, 'loc_space'):
         return None
 
+    if node.loc_space == 'unique':
+        # we could alternately make an "OTHER" type category
+        # and just stuff in ('unique', offset)
+        return None
+
     if node.loc_space not in _space_mapping:
         raise Exception(f'Unhandled AST loc_space "{node.loc_space}"')
 
@@ -54,6 +59,8 @@ def to_varlib_dtype(node:ASTNode, parent:datatype.DataType=None) -> datatype.Dat
         return atype
     elif node.kind == 'VoidType':
         return datatype.BuiltinType('void', False, False, 0)
+    elif node.kind == 'EnumType':
+        return datatype.EnumType(node.name)
     elif node.kind.endswith('Type'):
         raise Exception(f'Unhandled AST type node "{node.kind}"')
 

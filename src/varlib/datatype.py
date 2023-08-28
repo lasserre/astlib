@@ -6,6 +6,7 @@ class DataTypeCategories:
     Array = 'ARRAY'
     Struct = 'STRUCT'
     Union = 'UNION'
+    Enum = 'ENUM'
 
     @staticmethod
     def get_list() -> List[str]:
@@ -13,7 +14,8 @@ class DataTypeCategories:
                 DataTypeCategories.Pointer,
                 DataTypeCategories.Array,
                 DataTypeCategories.Struct,
-                DataTypeCategories.Union]
+                DataTypeCategories.Union,
+                DataTypeCategories.Enum]
 
 class DataType:
     '''
@@ -146,3 +148,11 @@ class UnionType(DataType):
         super().__init__(DataTypeCategories.Union, parent)
         self.fields = fields
         self.name = name
+
+class EnumType(DataType):
+    def __init__(self, name:str) -> None:
+        super().__init__(DataTypeCategories.Enum, None)
+        self.name = name
+
+    # TODO - if we really care about enums, need to extend this to
+    # define the enumerated values (EnumConstantDecl from AST)
