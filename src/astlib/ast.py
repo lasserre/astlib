@@ -12,15 +12,15 @@ _ast_class_by_name = {}
 _space_mapping = {
     'register': location.LocationType.Register,
     'stack': location.LocationType.Stack,
+    'join': location.LocationType.Join,
+    'unique': location.LocationType.Unique,
 }
 
 def to_varlib_location(node:ASTNode) -> location.Location:
     if not hasattr(node, 'loc_space'):
         return None
 
-    if node.loc_space == 'unique':
-        # we could alternately make an "OTHER" type category
-        # and just stuff in ('unique', offset)
+    if not node.loc_space:
         return None
 
     if node.loc_space not in _space_mapping:
@@ -50,7 +50,7 @@ def to_varlib_dtype(node:ASTNode, parent:datatype.DataType=None) -> datatype.Dat
                     return datatype.RecursiveStructType(pnode, parent)
                 pnode = pnode.parent
             stype = datatype.StructType({}, node.name, parent)
-            dt_fields = {off: datatype.StructField(to_varlib_dtype(f.dtype, stype), f.name) for off, f in node.fields_by_offset.items()}
+            dt_fields = {off: datatype.StructField(to_varlib_dtype(f.dtype, parent=stype), f.name) for off, f in node.fields_by_offset.items()}
             stype.fields_by_offset = dt_fields
             return stype
     elif node.kind == 'ConstantArrayType':
@@ -61,6 +61,14 @@ def to_varlib_dtype(node:ASTNode, parent:datatype.DataType=None) -> datatype.Dat
         return datatype.BuiltinType('void', False, False, 0)
     elif node.kind == 'EnumType':
         return datatype.EnumType(node.name)
+    elif node.kind == 'FunctionType':
+        fptype = datatype.FunctionProtoType(None, [], parent)
+        fptype.return_dtype = to_varlib_dtype(node.return_dtype, parent=fptype)
+        fptype.params = [to_varlib_dtype(p, parent=fptype) for p in node.inner]
+        return fptype
+    elif node.kind == 'TypedefType':
+        # convert to canonical type (remove typdefs)
+        return to_varlib_dtype(node.decl.inner[0], parent=parent)
     elif node.kind.endswith('Type'):
         raise Exception(f'Unhandled AST type node "{node.kind}"')
 

@@ -7,6 +7,7 @@ class DataTypeCategories:
     Struct = 'STRUCT'
     Union = 'UNION'
     Enum = 'ENUM'
+    Function = 'FUNCTION'
 
     @staticmethod
     def get_list() -> List[str]:
@@ -15,7 +16,8 @@ class DataTypeCategories:
                 DataTypeCategories.Array,
                 DataTypeCategories.Struct,
                 DataTypeCategories.Union,
-                DataTypeCategories.Enum]
+                DataTypeCategories.Enum,
+                DataTypeCategories.Function]
 
 class DataType:
     '''
@@ -156,3 +158,14 @@ class EnumType(DataType):
 
     # TODO - if we really care about enums, need to extend this to
     # define the enumerated values (EnumConstantDecl from AST)
+
+class FunctionProtoType(DataType):
+    '''
+    This may serve double duty - we can represent a function prototype for things
+    like prototype recovery - but the main purpose is to represent the prototype
+    portion of a function pointer type.
+    '''
+    def __init__(self, return_dtype:DataType, params:List[DataType], parent: DataType) -> None:
+        super().__init__(DataTypeCategories.Function, parent)
+        self.return_dtype = return_dtype
+        self.params = params

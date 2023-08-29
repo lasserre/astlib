@@ -4,12 +4,18 @@ class LocationType:
     Register = 'reg'
     Stack = 'stack'
     Memory = 'mem'
+    # these may be temporary...going to see how these correlate
+    # with DWARF symbols first
+    Join = 'JOIN'
+    Unique = 'UNIQUE'
 
     @staticmethod
     def get_list() -> List[str]:
         return [LocationType.Register,
                 LocationType.Stack,
-                LocationType.Memory]
+                LocationType.Memory,
+                LocationType.Join,
+                LocationType.Unique]
 
 class Location:
     '''
