@@ -27,6 +27,9 @@ class Location:
         self.reg_name = reg_name.lower()    # make register casing consistent
         self.offset = offset
 
+    def __hash__(self):
+        return hash((self.loc_type, self.reg_name, self.offset))
+
     def __eq__(self, __value: object) -> bool:
         if isinstance(__value, Location):
             if self.loc_type == LocationType.Register:
