@@ -10,6 +10,8 @@ from elftools.dwarf.descriptions import ExprDumper
 from pathlib import Path
 from typing import Generator, Iterator, Set, List, Any, Dict
 
+from varlib.datatype import *
+
 GHIDRA_ELF_IMAGE_BASE_DEFAULT_x64 = 0x100000
 
 def ghidra_to_dwarf_addr(ghidra_addr:int):
@@ -122,6 +124,34 @@ def get_die_typename(self:DIE):
     raise Exception(f'TODO: {type_die.tag}')
     # return f'TODO: {type_die.tag}'
 
+def memberDIE_to_varlib(mdie:DIE, parent=None):
+    KEY = 'DW_AT_data_member_location'
+    offset = mdie.attributes[KEY].value if KEY in mdie.attributes else 0
+    return (offset, StructField(dtype=to_varlib_dtype(mdie, parent), name=mdie.name))
+
+def structDIE_to_varlib(sdie:DIE, name:str, parent=None):
+    recursive = check_recursive_struct_ref(name, parent)
+    if recursive:
+        return recursive
+
+    stype = StructType(fields_by_offset={}, name=name, parent=parent)
+    member_dies = [memberDIE_to_varlib(x, parent=stype) for x in sdie.iter_children() if x.tag == 'DW_TAG_member']
+    stype.fields_by_offset = {x[0]: x[1] for x in member_dies}
+    return stype
+
+def to_varlib_dtype(self:DIE, parent:DataType=None):
+    if self.type_die.tag == 'DW_TAG_typedef':
+        # resolve to canonical type
+        return to_varlib_dtype(self.type_die)
+    elif self.type_die.tag == 'DW_TAG_structure_type':
+        name = self.type_die.name
+        if not name and self.tag == 'DW_TAG_typedef':
+            # use the typedef name for structs
+            name = self.name
+        return structDIE_to_varlib(self.type_die, name, parent)
+
+    import IPython; IPython.embed()
+
 def get_die_location(self:DIE):
     d = ExprDumper(self.dwarfinfo.structs)
     if 'DW_AT_location' in self.attributes:
@@ -173,6 +203,7 @@ DIE.low_pc = die_property('DW_AT_low_pc', None)
 DIE.high_pc = die_property('DW_AT_high_pc', None)
 DIE.type_die = property(get_type_die)
 DIE.type_name = property(get_die_typename)
+DIE.dtype_varlib = property(to_varlib_dtype)
 DIE.struct_layout = property(get_struct_layout)
 
 # CLS: taken from dwarf_lineprogram_filenames.py example in pyelftools

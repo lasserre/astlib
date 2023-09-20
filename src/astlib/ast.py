@@ -44,11 +44,9 @@ def to_varlib_dtype(node:ASTNode, parent:datatype.DataType=None) -> datatype.Dat
         if node.is_union:
             return datatype.UnionType(node.fields, node.name, parent)
         else:
-            pnode = parent
-            while pnode is not None:
-                if pnode.category == datatype.DataTypeCategories.Struct and pnode.name == node.name:
-                    return datatype.RecursiveStructType(pnode, parent)
-                pnode = pnode.parent
+            recursive_stype = datatype.check_recursive_struct_ref(node.name, parent)
+            if recursive_stype:
+                return recursive_stype
             stype = datatype.StructType({}, node.name, parent)
             dt_fields = {off: datatype.StructField(to_varlib_dtype(f.dtype, parent=stype), f.name) for off, f in node.fields_by_offset.items()}
             stype.fields_by_offset = dt_fields

@@ -136,6 +136,19 @@ class RecursiveStructType(StructType):
     # def fields_by_offset(self):
     #     return self.prev_definition.fields_by_offset
 
+def check_recursive_struct_ref(node_name:str, parent:DataType):
+    '''
+    Walks up the data type tree hierarchy checking if this is a recursive structure
+    definition. If so, returns a RecursiveStructType for the given node_name. If
+    not, returns None (and the caller may continue creating a normal StructType
+    node)
+    '''
+    pnode = parent
+    while pnode is not None:
+        if pnode.category == DataTypeCategories.Struct and pnode.name == node_name:
+            return RecursiveStructType(pnode, parent)
+        pnode = pnode.parent
+    return None     # no recursion found
 
 # NOTE: I think unions should be treated as their own type...
 # since we care so much about offsets in structure recovery,
