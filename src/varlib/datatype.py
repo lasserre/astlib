@@ -110,6 +110,10 @@ class StructField:
         self.dtype = dtype
         self.name = name
 
+    @property
+    def size(self):
+        return self.dtype.size
+
 class StructType(DataType):
     '''
     Structure types
@@ -119,6 +123,10 @@ class StructType(DataType):
         self.fields_by_offset = fields_by_offset
         self.name = name
         self.is_recursive_def = False
+
+    @property
+    def size(self):
+        return sum(f.size for f in self.fields_by_offset.values())
 
 class RecursiveStructType(StructType):
     '''

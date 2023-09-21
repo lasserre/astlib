@@ -139,17 +139,51 @@ def structDIE_to_varlib(sdie:DIE, name:str, parent=None):
     stype.fields_by_offset = {x[0]: x[1] for x in member_dies}
     return stype
 
+_basetype_encoding_to_tuple = {
+    # value: (isFloating, isSigned)
+    2: (False, False),  # DW_ATE_boolean
+    4: (True, True),    # DW_ATE_float
+    5: (False, True),   # DW_ATE_signed
+    6: (False, True),   # DW_ATE_signed_char
+    7: (False, False),  # DW_ATE_unsigned
+    8: (False, False),  # DW_ATE_unsigned_char
+}
+
+def getDwarfBaseTypeEncodingAttrs(DW_ATE_encoding:int):
+    '''
+    Returns the (isFloating, isSigned) tuple for this base type encoding value
+
+    e.g. input of 8 corresponds to DW_ATE_unsigned_char and returns (False, False)
+    '''
+    if DW_ATE_encoding not in _basetype_encoding_to_tuple:
+        raise Exception(f'Unrecognized DWARF base type encoding value: {DW_ATE_encoding}')
+
+    return _basetype_encoding_to_tuple[DW_ATE_encoding]
+
 def to_varlib_dtype(self:DIE, parent:DataType=None):
-    if self.type_die.tag == 'DW_TAG_typedef':
+    if self.type_die.tag == 'DW_TAG_typedef' or \
+       self.type_die.tag == 'DW_TAG_const_type':
         # resolve to canonical type
-        return to_varlib_dtype(self.type_die)
+        return to_varlib_dtype(self.type_die, parent=parent)
     elif self.type_die.tag == 'DW_TAG_structure_type':
         name = self.type_die.name
         if not name and self.tag == 'DW_TAG_typedef':
             # use the typedef name for structs
             name = self.name
         return structDIE_to_varlib(self.type_die, name, parent)
+    elif self.type_die.tag == 'DW_TAG_pointer_type':
+        ptype = PointerType(None, self.type_die.byte_size, parent)
+        ptype.pointed_to = to_varlib_dtype(self.type_die.type_die, parent=ptype)
+        return ptype
+    elif self.type_die.tag == 'DW_TAG_base_type':
+        is_float, is_signed = getDwarfBaseTypeEncodingAttrs(self.type_die.encoding)
+        return BuiltinType(self.type_die.name, is_float, is_signed, self.type_die.byte_size)
 
+    print(f'UNHANDLED type_die tag: {self.type_die.tag}')
+    import IPython; IPython.embed()
+
+def to_varlib_location(self:DIE):
+    print(f'Handle location: {self.location_str}')
     import IPython; IPython.embed()
 
 def get_die_location(self:DIE):
@@ -198,13 +232,16 @@ DIE.namebytes = die_property('DW_AT_name', b'')
 # external => visible outside its compilation unit
 DIE.external = die_property('DW_AT_external', False)
 # DIE.location = die_property('DW_AT_location', None)
-DIE.location = property(lambda x: get_die_location(x))
+DIE.location_str = property(lambda x: get_die_location(x))
+DIE.location_varlib = property(to_varlib_location)
 DIE.low_pc = die_property('DW_AT_low_pc', None)
 DIE.high_pc = die_property('DW_AT_high_pc', None)
 DIE.type_die = property(get_type_die)
 DIE.type_name = property(get_die_typename)
 DIE.dtype_varlib = property(to_varlib_dtype)
 DIE.struct_layout = property(get_struct_layout)
+DIE.byte_size = die_property('DW_AT_byte_size', None)
+DIE.encoding = die_property('DW_AT_encoding', None)
 
 # CLS: taken from dwarf_lineprogram_filenames.py example in pyelftools
 def line_entry_mapping(line_program):
