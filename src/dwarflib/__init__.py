@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Generator, Iterator, Set, List, Any, Dict
 
 from varlib.datatype import *
+from varlib.location import *
 
 GHIDRA_ELF_IMAGE_BASE_DEFAULT_x64 = 0x100000
 
@@ -173,16 +174,32 @@ def to_varlib_dtype(self:DIE, parent:DataType=None):
         return structDIE_to_varlib(self.type_die, name, parent)
     elif self.type_die.tag == 'DW_TAG_pointer_type':
         ptype = PointerType(None, self.type_die.byte_size, parent)
-        ptype.pointed_to = to_varlib_dtype(self.type_die.type_die, parent=ptype)
+        ptype.pointed_to = to_varlib_dtype(self.type_die, parent=ptype)
         return ptype
     elif self.type_die.tag == 'DW_TAG_base_type':
         is_float, is_signed = getDwarfBaseTypeEncodingAttrs(self.type_die.encoding)
         return BuiltinType(self.type_die.name, is_float, is_signed, self.type_die.byte_size)
+    elif self.type_die.tag == 'DW_TAG_array_type':
+        subrange = [x for x in self.type_die.iter_children() if x.tag == 'DW_TAG_subrange_type'][0]
+        upper_bound = subrange.attributes['DW_AT_upper_bound'].value
+        num_elems = upper_bound + 1
+        arrtype = ArrayType(None, num_elems, parent)
+        arrtype.element_type = to_varlib_dtype(self.type_die, parent=arrtype)
+        return arrtype
 
+    # raise Exception(f'UNHANDLED type_die tag: {self.type_die.tag}')
     print(f'UNHANDLED type_die tag: {self.type_die.tag}')
     import IPython; IPython.embed()
 
 def to_varlib_location(self:DIE):
+    loc_str = self.location_str
+    if loc_str.startswith('DW_OP_fbreg'):
+        cfa_offset = int(loc_str.split(':')[1].strip())
+        # NOTE: this assumes 64-bit code where CFA is the stack pointer at the call site
+        # just before the return IP is pushed
+        ghidra_stack_offset = cfa_offset + 8
+        return Location(LocationType.Stack, offset=ghidra_stack_offset)
+
     print(f'Handle location: {self.location_str}')
     import IPython; IPython.embed()
 
