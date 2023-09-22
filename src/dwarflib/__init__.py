@@ -211,6 +211,10 @@ def to_varlib_location(self:DIE):
         # just before the return IP is pushed
         ghidra_stack_offset = cfa_offset + 8
         return Location(LocationType.Stack, offset=ghidra_stack_offset)
+    elif loc_str.startswith('DW_OP_addr'):
+        dwarf_addr = int(loc_str.split(':')[1].strip(), 16)     # this looks to be in hex always?
+        ghidra_addr = dwarf_to_ghidra_addr(dwarf_addr)
+        return Location(LocationType.Memory, offset=ghidra_addr)
 
     print(f'Handle location: {self.location_str}')
     import IPython; IPython.embed()
