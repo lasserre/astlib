@@ -180,7 +180,7 @@ class EnumType(DataType):
     # TODO - if we really care about enums, need to extend this to
     # define the enumerated values (EnumConstantDecl from AST)
 
-class FunctionProtoType(DataType):
+class FunctionPrototype(DataType):
     '''
     This may serve double duty - we can represent a function prototype for things
     like prototype recovery - but the main purpose is to represent the prototype

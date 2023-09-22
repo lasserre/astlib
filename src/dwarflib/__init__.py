@@ -140,6 +140,11 @@ def structDIE_to_varlib(sdie:DIE, name:str, parent=None):
     stype.fields_by_offset = {x[0]: x[1] for x in member_dies}
     return stype
 
+def unionDIE_to_varlib(udie:DIE, parent=None):
+    utype = UnionType([], udie.name, parent)
+    utype.fields = [StructField(to_varlib_dtype(x), x.name) for x in udie.iter_children() if x.tag == 'DW_TAG_member']
+    return utype
+
 _basetype_encoding_to_tuple = {
     # value: (isFloating, isSigned)
     2: (False, False),  # DW_ATE_boolean
@@ -186,6 +191,13 @@ def to_varlib_dtype(self:DIE, parent:DataType=None):
         arrtype = ArrayType(None, num_elems, parent)
         arrtype.element_type = to_varlib_dtype(self.type_die, parent=arrtype)
         return arrtype
+    elif self.type_die.tag == 'DW_TAG_union_type':
+        return unionDIE_to_varlib(self.type_die, parent)
+    elif self.type_die.tag == 'DW_TAG_subroutine_type':
+        fproto = FunctionPrototype(None, [], parent)
+        fproto.return_dtype = to_varlib_dtype(self.type_die, fproto) if self.type_die.type_die else BuiltinType('void', False, False, 0)
+        fproto.params = [to_varlib_dtype(p, fproto) for p in self.type_die.iter_children() if p.tag == 'DW_TAG_formal_parameter']
+        return fproto
 
     # raise Exception(f'UNHANDLED type_die tag: {self.type_die.tag}')
     print(f'UNHANDLED type_die tag: {self.type_die.tag}')
