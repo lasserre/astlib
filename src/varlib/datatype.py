@@ -56,6 +56,11 @@ class BuiltinType(DataType):
         self.signed = signed
         self._size = size
 
+    @staticmethod
+    def create_void_type():
+        '''Create a new BuiltinType instance that represents the void type'''
+        return BuiltinType('void', floating_point=False, signed=False, size=0)
+
     @property
     def is_void(self) -> bool:
         return self.size == 0

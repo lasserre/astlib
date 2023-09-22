@@ -166,16 +166,21 @@ def getDwarfBaseTypeEncodingAttrs(DW_ATE_encoding:int):
 
     return _basetype_encoding_to_tuple[DW_ATE_encoding]
 
+def get_typename(self:DIE):
+    if not self.type_die.name and self.tag == 'DW_TAG_typedef':
+        return self.name    # use the typedef name if child doesn't have one
+    return self.type_die.name
+
 def to_varlib_dtype(self:DIE, parent:DataType=None):
+    if self.type_die is None:
+        return BuiltinType.create_void_type()
+
     if self.type_die.tag == 'DW_TAG_typedef' or \
        self.type_die.tag == 'DW_TAG_const_type':
         # resolve to canonical type
         return to_varlib_dtype(self.type_die, parent=parent)
     elif self.type_die.tag == 'DW_TAG_structure_type':
-        name = self.type_die.name
-        if not name and self.tag == 'DW_TAG_typedef':
-            # use the typedef name for structs
-            name = self.name
+        name = get_typename(self)
         return structDIE_to_varlib(self.type_die, name, parent)
     elif self.type_die.tag == 'DW_TAG_pointer_type':
         ptype = PointerType(None, self.type_die.byte_size, parent)
@@ -195,9 +200,12 @@ def to_varlib_dtype(self:DIE, parent:DataType=None):
         return unionDIE_to_varlib(self.type_die, parent)
     elif self.type_die.tag == 'DW_TAG_subroutine_type':
         fproto = FunctionPrototype(None, [], parent)
-        fproto.return_dtype = to_varlib_dtype(self.type_die, fproto) if self.type_die.type_die else BuiltinType('void', False, False, 0)
+        fproto.return_dtype = to_varlib_dtype(self.type_die, fproto) if self.type_die.type_die else BuiltinType.create_void_type()
         fproto.params = [to_varlib_dtype(p, fproto) for p in self.type_die.iter_children() if p.tag == 'DW_TAG_formal_parameter']
         return fproto
+    elif self.type_die.tag == 'DW_TAG_enumeration_type':
+        name = get_typename(self)
+        return EnumType(name)
 
     # raise Exception(f'UNHANDLED type_die tag: {self.type_die.tag}')
     print(f'UNHANDLED type_die tag: {self.type_die.tag}')
@@ -275,6 +283,7 @@ DIE.dtype_varlib = property(to_varlib_dtype)
 DIE.struct_layout = property(get_struct_layout)
 DIE.byte_size = die_property('DW_AT_byte_size', None)
 DIE.encoding = die_property('DW_AT_encoding', None)
+DIE.artificial = die_property('DW_AT_artificial', None)
 
 # CLS: taken from dwarf_lineprogram_filenames.py example in pyelftools
 def line_entry_mapping(line_program):
