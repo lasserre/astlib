@@ -105,7 +105,7 @@ class ArrayType(DataType):
 
     @property
     def size(self):
-        return self.num_elements * self.element_type.size
+        return self.num_elements * self.element_type.size if self.num_elements else 0
 
 class StructField:
     '''

@@ -191,8 +191,12 @@ def to_varlib_dtype(self:DIE, parent:DataType=None):
         return BuiltinType(self.type_die.name, is_float, is_signed, self.type_die.byte_size)
     elif self.type_die.tag == 'DW_TAG_array_type':
         subrange = [x for x in self.type_die.iter_children() if x.tag == 'DW_TAG_subrange_type'][0]
-        upper_bound = subrange.attributes['DW_AT_upper_bound'].value
-        num_elems = upper_bound + 1
+        if subrange.upper_bound:
+            num_elems = subrange.upper_bound + 1
+        elif subrange.count:
+            num_elems = subrange.count
+        else:
+            num_elems = None   # unknown size
         arrtype = ArrayType(None, num_elems, parent)
         arrtype.element_type = to_varlib_dtype(self.type_die, parent=arrtype)
         return arrtype
@@ -284,6 +288,8 @@ DIE.struct_layout = property(get_struct_layout)
 DIE.byte_size = die_property('DW_AT_byte_size', None)
 DIE.encoding = die_property('DW_AT_encoding', None)
 DIE.artificial = die_property('DW_AT_artificial', None)
+DIE.upper_bound = die_property('DW_AT_upper_bound', None)
+DIE.count = die_property('DW_AT_count', None)
 
 # CLS: taken from dwarf_lineprogram_filenames.py example in pyelftools
 def line_entry_mapping(line_program):

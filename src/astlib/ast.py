@@ -60,7 +60,7 @@ def to_varlib_dtype(node:ASTNode, parent:datatype.DataType=None) -> datatype.Dat
     elif node.kind == 'EnumType':
         return datatype.EnumType(node.name)
     elif node.kind == 'FunctionType':
-        fptype = datatype.FunctionProtoType(None, [], parent)
+        fptype = datatype.FunctionPrototype(None, [], parent)
         fptype.return_dtype = to_varlib_dtype(node.return_dtype, parent=fptype)
         fptype.params = [to_varlib_dtype(p, parent=fptype) for p in node.inner]
         return fptype
