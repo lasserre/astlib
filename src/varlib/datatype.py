@@ -177,10 +177,19 @@ class UnionType(DataType):
         self.fields = fields
         self.name = name
 
+    @property
+    def size(self):
+        return max(f.size for f in self.fields)
+
 class EnumType(DataType):
-    def __init__(self, name:str) -> None:
+    def __init__(self, name:str, dt_size:int=4) -> None:
         super().__init__(DataTypeCategories.Enum, None)
         self.name = name
+        self.dt_size = dt_size  # don't know if we need this, assume 4B int for now
+
+    @property
+    def size(self):
+        return self.dt_size
 
     # TODO - if we really care about enums, need to extend this to
     # define the enumerated values (EnumConstantDecl from AST)
@@ -195,3 +204,7 @@ class FunctionPrototype(DataType):
         super().__init__(DataTypeCategories.Function, parent)
         self.return_dtype = return_dtype
         self.params = params
+
+    @property
+    def size(self):
+        return 0    # this should have a pointer parent, whose size is meaningful
