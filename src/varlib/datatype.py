@@ -56,6 +56,9 @@ class BuiltinType(DataType):
         self.signed = signed
         self._size = size
 
+    def __str__(self):
+        return self.name
+
     @staticmethod
     def create_void_type():
         '''Create a new BuiltinType instance that represents the void type'''
@@ -90,6 +93,13 @@ class PointerType(DataType):
     def size(self):
         return self.pointer_size
 
+    def __str__(self):
+        if self.pointed_to.category == DataTypeCategories.Function:
+            # delegate entire string representation to the function prototype
+            # which renders itself like a function pointer
+            return str(self.pointed_to)
+        return f'{self.pointed_to}*'
+
 class ArrayType(DataType):
     '''
     Array types
@@ -107,6 +117,10 @@ class ArrayType(DataType):
     def size(self):
         return self.num_elements * self.element_type.size if self.num_elements else 0
 
+    def __str__(self):
+        len_str = self.num_elements if self.num_elements else ''
+        return f'{self.element_type}[{len_str}]'
+
 class StructField:
     '''
     Do we want to call these fields or members? would be good to be consistent...
@@ -118,6 +132,9 @@ class StructField:
     @property
     def size(self):
         return self.dtype.size
+
+    def __str__(self):
+        return f'{self.dtype} {self.name}'
 
 class StructType(DataType):
     '''
@@ -132,6 +149,9 @@ class StructType(DataType):
     @property
     def size(self):
         return sum(f.size for f in self.fields_by_offset.values())
+
+    def __str__(self):
+        return self.name
 
 class RecursiveStructType(StructType):
     '''
@@ -181,6 +201,9 @@ class UnionType(DataType):
     def size(self):
         return max(f.size for f in self.fields)
 
+    def __str__(self):
+        return self.name
+
 class EnumType(DataType):
     def __init__(self, name:str, dt_size:int=4) -> None:
         super().__init__(DataTypeCategories.Enum, None)
@@ -190,6 +213,9 @@ class EnumType(DataType):
     @property
     def size(self):
         return self.dt_size
+
+    def __str__(self):
+        return self.name
 
     # TODO - if we really care about enums, need to extend this to
     # define the enumerated values (EnumConstantDecl from AST)
@@ -208,3 +234,7 @@ class FunctionPrototype(DataType):
     @property
     def size(self):
         return 0    # this should have a pointer parent, whose size is meaningful
+
+    def __str__(self):
+        # assumes function pointer
+        return f'{self.return_dtype} (*)({",".join(self.params)})'
