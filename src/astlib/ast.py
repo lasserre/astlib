@@ -42,7 +42,9 @@ def to_varlib_dtype(node:ASTNode, parent:datatype.DataType=None) -> datatype.Dat
         return ptype
     elif node.kind == 'StructType':
         if node.is_union:
-            return datatype.UnionType(node.fields, node.name, parent)
+            utype = datatype.UnionType([], node.name, parent)
+            utype.fields = [datatype.StructField(to_varlib_dtype(f.dtype, parent=utype), f.name) for f in node.fields]
+            return utype
         else:
             recursive_stype = datatype.check_recursive_struct_ref(node.name, parent)
             if recursive_stype:
