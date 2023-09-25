@@ -59,6 +59,16 @@ class BuiltinType(DataType):
     def __str__(self):
         return self.name
 
+    def __eq__(self, other):
+        if not isinstance(other, BuiltinType):
+            return False
+        return self.floating_point == other.floating_point and \
+            self.signed == other.signed and \
+            self.size == other.size
+
+    def __hash__(self):
+        return hash((self.floating_point, self.signed, self.size))
+
     @staticmethod
     def create_void_type():
         '''Create a new BuiltinType instance that represents the void type'''
@@ -100,6 +110,14 @@ class PointerType(DataType):
             return str(self.pointed_to)
         return f'{self.pointed_to}*'
 
+    def __eq__(self, other):
+        if not isinstance(other, PointerType):
+            return False
+        return self.pointed_to == other.pointed_to
+
+    def __hash__(self):
+        return hash((self.pointed_to,))
+
 class ArrayType(DataType):
     '''
     Array types
@@ -121,6 +139,14 @@ class ArrayType(DataType):
         len_str = self.num_elements if self.num_elements else ''
         return f'{self.element_type}[{len_str}]'
 
+    def __eq__(self, other):
+        if not isinstance(other, ArrayType):
+            return False
+        return self.num_elements == other.num_elements and self.element_type == other.element_type
+
+    def __hash__(self):
+        return hash((self.num_elements, self.element_type))
+
 class StructField:
     '''
     Do we want to call these fields or members? would be good to be consistent...
@@ -135,6 +161,15 @@ class StructField:
 
     def __str__(self):
         return f'{self.dtype} {self.name}'
+
+    def __eq__(self, other):
+        if not isinstance(other, StructField):
+            return False
+        # NOTE: field name is not part of the comparison, just for readability
+        return self.dtype == other.dtype
+
+    def __hash__(self):
+        return hash((self.dtype,))
 
 class StructType(DataType):
     '''
@@ -153,6 +188,19 @@ class StructType(DataType):
     def __str__(self):
         return self.name
 
+    def __eq__(self, other):
+        if not isinstance(other, StructType):
+            return False
+        if set(self.fields_by_offset.keys()) != set(other.fields_by_offset.keys()):
+            return False    # set of member offsets don't match
+        for off, field in self.fields_by_offset.items():
+            if field != other.fields_by_offset[off]:
+                return False
+        return True
+
+    def __hash__(self):
+        return hash((*self.fields_by_offset.values()))
+
 class RecursiveStructType(StructType):
     '''
     This is a little hacky, but purpose is to be able to:
@@ -165,9 +213,18 @@ class RecursiveStructType(StructType):
         self.prev_definition = prev_definition
         self.is_recursive_def = True
 
-    # @property
-    # def fields_by_offset(self):
-    #     return self.prev_definition.fields_by_offset
+    def __eq__(self, other):
+        if not isinstance(other, RecursiveStructType):
+            return False
+        # this may change, but for now...
+        # I'm thinking we just verify we're comparing to another RecursiveStructType
+        # and call it good. We only should get in this case if this is nested inside
+        # a larger structure...later on we could use struct IDs to be 100% sure we're
+        # pointing at the right one but for now I won't worry about it
+        return True
+
+    def __hash__(self):
+        return hash((len(self.prev_definition.fields_by_offset),))
 
 def check_recursive_struct_ref(node_name:str, parent:DataType):
     '''
@@ -204,6 +261,40 @@ class UnionType(DataType):
     def __str__(self):
         return self.name
 
+    def __hash__(self):
+        return hash((*self.fields))
+
+    def __eq__(self, other):
+        if not isinstance(other, UnionType):
+            return False
+
+        # I believe this will work, since the set equality checks that each unique
+        # field is equal and the len(fields) == len(set(fields)) check ensures we
+        # don't have duplicates that are "collapsing down" within the set
+        # (if so, we would need to make sure that the same duplicates exist in both
+        # sets of fields)
+        if len(self.fields) != len(set(self.fields)):
+            # we have duplicates
+            if len(self.fields) != len(other.fields):
+                return False
+
+            other_fieldlist = list(other.fields)
+            pop_other = False
+            for f in self.fields:
+                for o in other_fieldlist:
+                    if f == o:
+                        pop_other = True
+                        break
+                if pop_other:
+                    other_fieldlist.remove(o)
+                    pop_other = False
+                else:
+                    return False    # went through all remaining other_fieldlist and no match
+            return True     # all fields matched a field in other
+        else:
+            # no duplicates, simple set comparison (hopefully this is normal case)
+            return set(self.fields) == set(other.fields)
+
 class EnumType(DataType):
     def __init__(self, name:str, dt_size:int=4) -> None:
         super().__init__(DataTypeCategories.Enum, None)
@@ -216,6 +307,17 @@ class EnumType(DataType):
 
     def __str__(self):
         return self.name
+
+    def __eq__(self, other):
+        if not isinstance(other, EnumType):
+            return False
+
+        # TODO: don't return true until we have defined enum values and can
+        # actually compare
+        return False
+
+    def __hash__(self):
+        return hash((self.name, self.dt_size))
 
     # TODO - if we really care about enums, need to extend this to
     # define the enumerated values (EnumConstantDecl from AST)
@@ -237,4 +339,12 @@ class FunctionPrototype(DataType):
 
     def __str__(self):
         # assumes function pointer
-        return f'{self.return_dtype} (*)({",".join(self.params)})'
+        return f'{self.return_dtype} (*)({",".join(str(p) for p in self.params)})'
+
+    def __eq__(self, other):
+        if not isinstance(other, FunctionPrototype):
+            return False
+        return self.return_dtype == other.return_dtype and set(self.params) == set(other.params)
+
+    def __hash__(self):
+        return hash((self.return_dtype, *self.params))
