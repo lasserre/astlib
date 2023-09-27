@@ -27,7 +27,8 @@ def to_varlib_location(node:ASTNode) -> location.Location:
         raise Exception(f'Unhandled AST loc_space "{node.loc_space}"')
 
     loc_type = _space_mapping[node.loc_space]
-    return location.Location(loc_type, node.loc_reg, node.loc_off)
+    loc_off = node.loc_off if loc_type != location.LocationType.Register else 0
+    return location.Location(loc_type, node.loc_reg, loc_off)
 
 def to_varlib_dtype(node:ASTNode, parent:datatype.DataType=None) -> datatype.DataType:
     '''
