@@ -199,7 +199,7 @@ class StructType(DataType):
         return True
 
     def __hash__(self):
-        return hash((*self.fields_by_offset.values()))
+        return hash(tuple(self.fields_by_offset.values()))
 
 class RecursiveStructType(StructType):
     '''
@@ -262,7 +262,7 @@ class UnionType(DataType):
         return self.name
 
     def __hash__(self):
-        return hash((*self.fields))
+        return hash(tuple(self.fields))
 
     def __eq__(self, other):
         if not isinstance(other, UnionType):
