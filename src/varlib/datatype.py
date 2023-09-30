@@ -42,6 +42,27 @@ class DataType:
         '''Size of this data type in bytes'''
         raise NotImplementedError(f'size property not implemented in {self.__class__}')
 
+_standard_floats = {
+    4: 'float',
+    8: 'double',
+    10: 'float10',
+}
+
+# <stdint.h>-style integer names:
+_standard_unsigned_ints = {
+    1: 'uint8_t',
+    2: 'uint16_t',
+    4: 'uint32_t',
+    8: 'uint64_t',
+}
+
+_standard_signed_ints = {
+    1: 'int8_t',
+    2: 'int16_t',
+    4: 'int32_t',
+    8: 'int64_t',
+}
+
 class BuiltinType(DataType):
     '''
     Built-in/primitive types like int, float, long, etc.
@@ -56,8 +77,26 @@ class BuiltinType(DataType):
         self.signed = signed
         self._size = size
 
+    @property
+    def standard_name(self) -> str:
+        '''
+        Returns a consistent name for a primitive type given its core
+        properties (sign, size, isFloating), as opposed to the identifier given
+        to the type by the data source (e.g. uint vs. unsigned int)
+
+        This facilitates equality comparison using only the string name
+        '''
+        if self.is_void:
+            return 'void'
+        if self.floating_point:
+            return _standard_floats[self.size] if self.size in _standard_floats else f'UNMAPPED_FLOAT_{self.size}'
+        elif self.signed:
+            return _standard_signed_ints[self.size] if self.size in _standard_signed_ints else f'UNMAPPED_INT_{self.size}'
+        else:
+            return _standard_unsigned_ints[self.size] if self.size in _standard_unsigned_ints else f'UNMAPPED_UINT_{self.size}'
+
     def __str__(self):
-        return self.name
+        return self.standard_name
 
     def __eq__(self, other):
         if not isinstance(other, BuiltinType):
