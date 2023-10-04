@@ -8,6 +8,12 @@ class LocationType:
     # with DWARF symbols first
     Join = 'JOIN'
     Unique = 'UNIQUE'
+    # this is intended to represent a location that doesn't exist or is unspecified
+    # (by DWARF usually), I'm adding it for variables that have no location.
+    # Looking at a variable like this, I think it got optimized out. So the debug
+    # info is there because it is in the source, but it doesn't exist in the binary
+    # so there is no location (my guess)
+    Undefined = 'UndefinedLoc'
 
     @staticmethod
     def get_list() -> List[str]:

@@ -171,12 +171,17 @@ def get_typename(self:DIE):
         return self.name    # use the typedef name if child doesn't have one
     return self.type_die.name
 
+_qualifier_tags = [
+    'DW_TAG_const_type',
+    'DW_TAG_volatile_type',
+    'DW_TAG_restrict_type',
+]
+
 def to_varlib_dtype(self:DIE, parent:DataType=None):
     if self.type_die is None:
         return BuiltinType.create_void_type()
 
-    if self.type_die.tag == 'DW_TAG_typedef' or \
-       self.type_die.tag == 'DW_TAG_const_type':
+    if self.type_die.tag == 'DW_TAG_typedef' or self.type_die.tag in _qualifier_tags:
         # resolve to canonical type
         return to_varlib_dtype(self.type_die, parent=parent)
     elif self.type_die.tag == 'DW_TAG_structure_type':
@@ -211,12 +216,14 @@ def to_varlib_dtype(self:DIE, parent:DataType=None):
         name = get_typename(self)
         return EnumType(name)
 
-    # raise Exception(f'UNHANDLED type_die tag: {self.type_die.tag}')
-    print(f'UNHANDLED type_die tag: {self.type_die.tag}')
-    import IPython; IPython.embed()
+    raise Exception(f'UNHANDLED type_die tag: {self.type_die.tag}')
+    # print(f'UNHANDLED type_die tag: {self.type_die.tag}')
+    # import IPython; IPython.embed()
 
 def to_varlib_location(self:DIE):
     loc_str = self.location_str
+    if not loc_str:
+        return Location(LocationType.Undefined)
     if loc_str.startswith('DW_OP_fbreg'):
         cfa_offset = int(loc_str.split(':')[1].strip())
         # NOTE: this assumes 64-bit code where CFA is the stack pointer at the call site
@@ -227,9 +234,15 @@ def to_varlib_location(self:DIE):
         dwarf_addr = int(loc_str.split(':')[1].strip(), 16)     # this looks to be in hex always?
         ghidra_addr = dwarf_to_ghidra_addr(dwarf_addr)
         return Location(LocationType.Memory, offset=ghidra_addr)
+    elif loc_str.startswith('DW_OP_reg'):
+        parts = loc_str.split(' (')
+        if len(parts) < 2:
+            raise Exception(f'Unexpected DWARF register string "{loc_str}"')
+        regname = parts[1][:-1]     # take everything but closing paren
+        return Location(LocationType.Register, reg_name=regname)
 
-    print(f'Handle location: {self.location_str}')
-    import IPython; IPython.embed()
+    raise Exception(f'Handle DWARF location: {self.location_str}')
+    # import IPython; IPython.embed()
 
 def get_die_location(self:DIE):
     d = ExprDumper(self.dwarfinfo.structs)
