@@ -303,6 +303,7 @@ DIE.encoding = die_property('DW_AT_encoding', None)
 DIE.artificial = die_property('DW_AT_artificial', None)
 DIE.upper_bound = die_property('DW_AT_upper_bound', None)
 DIE.count = die_property('DW_AT_count', None)
+DIE.inline = die_property('DW_AT_inline', None)
 
 # CLS: taken from dwarf_lineprogram_filenames.py example in pyelftools
 def line_entry_mapping(line_program):
