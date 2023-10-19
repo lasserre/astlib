@@ -46,6 +46,7 @@ _standard_floats = {
     4: 'float',
     8: 'double',
     10: 'float10',
+    16: 'long double',
 }
 
 # <stdint.h>-style integer names:
@@ -54,6 +55,7 @@ _standard_unsigned_ints = {
     2: 'uint16_t',
     4: 'uint32_t',
     8: 'uint64_t',
+    16: '__uint128_t',
 }
 
 _standard_signed_ints = {
@@ -61,6 +63,7 @@ _standard_signed_ints = {
     2: 'int16_t',
     4: 'int32_t',
     8: 'int64_t',
+    16: '__int128_t',
 }
 
 class BuiltinType(DataType):
