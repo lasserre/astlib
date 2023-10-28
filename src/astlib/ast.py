@@ -138,9 +138,13 @@ def _new_astnode_class_from_dict(d:Dict):
 
             _handle_attached_types(self)
 
-        def render(self, format='pdf', outfolder=Path.cwd(), ast_name:str='',
+        def render(self, format='pdf', outfolder=None, ast_name:str='',
                     fontname:str='Cascadia Code',
                     format_node:Callable[[ASTNode,NodeAttrs],Any]=None):
+            '''
+            outfolder: If set, the AST graph rendering will be saved in the desired format
+                       within this folder. If outfolder is None, no files will be written
+            '''
             return ASTViewer(format_node).render_ast(self, format, outfolder, ast_name, fontname)
 
         def dtype_str(self):
@@ -151,6 +155,10 @@ def _new_astnode_class_from_dict(d:Dict):
 
         def nodes_at_addr(self, addr:int) -> List[ASTNode]:
             return GetNodesAtAddr(addr).visit(self)
+
+        @property
+        def is_statement(self) -> bool:
+            return self.kind == 'BinaryOperator' and self.opcode == '='
 
         @property
         def dtype_varlib(self) -> datatype.DataType:

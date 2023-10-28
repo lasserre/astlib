@@ -1,6 +1,7 @@
 from .ast import *
 from .astvisitor import *
 from .ghidra_scripts import *
+from . import color_ast
 from pathlib import Path
 
 def ghidra_script_folder() -> Path:

@@ -49,15 +49,29 @@ class ASTVisitor:
         return visit_method(node) if visit_method else self.default_return_value
 
 class VisitAllChildrenByDefaultVisitor(ASTVisitor):
+    '''
+    Visits all AST nodes in the tree by default, allowing specific node types to
+    be visited by derived classes who implement visit_<NODE_KIND> methods.
+
+    visit() will return a list of non-None return values gathered from node-specific
+    visit methods, which may be used or ignored based on the concrete visitor
+    '''
     def __init__(self) -> None:
         super().__init__(warn_missing_visits=False, missing_visit_methods=[])
 
     def visit(self, node:ASTNode):
+        return_vals = []
         visit_method = getattr(self, node.visitor_method_name, None)
+
         if visit_method:
-            visit_method(node)
+            res = visit_method(node)
+            if res is not None:
+                return_vals.append(res)
+
         for child in node.inner:
-            self.visit(child)
+            return_vals.extend(self.visit(child))
+
+        return return_vals
 
         # return self._visit_all_children(node)
 

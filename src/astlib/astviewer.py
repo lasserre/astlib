@@ -32,7 +32,7 @@ class ASTViewer(VisitAllChildrenByDefaultVisitor):
         self.id_ctr = 0
         self._format_node = format_node
 
-    def render_ast(self, node:ASTNode, format:str, outfolder:Path, ast_name:str='',
+    def render_ast(self, node:ASTNode, format:str, outfolder:Path=None, ast_name:str='',
                    fontname:str='Cascadia Code'):
         if not ast_name:
             ast_name = f'{node.kind}_AST'
@@ -46,7 +46,9 @@ class ASTViewer(VisitAllChildrenByDefaultVisitor):
         self.assign_ids(node)
         self.visit(node)
 
-        self.g.render(directory=outfolder, view=False)
+        if outfolder is not None:
+            self.g.render(directory=outfolder, view=False)
+
         return self.g
 
     def assign_ids(self, node:ASTNode):
@@ -71,6 +73,9 @@ class ASTViewer(VisitAllChildrenByDefaultVisitor):
         if parent and '_graph_id' in parent.__dict__:
             self.g.edge(node._graph_id, parent._graph_id)
 
+    def visit_ArraySubscriptExpr(self, node):
+        return NodeAttrs('')
+
     def visit_BinaryOperator(self, node):
         return NodeAttrs(f'{node.opcode}')
 
@@ -91,6 +96,9 @@ class ASTViewer(VisitAllChildrenByDefaultVisitor):
 
     def visit_DeclStmt(self, stmt:ASTNode):
         return NodeAttrs('')
+
+    def visit_FloatingLiteral(self, lit:ASTNode):
+        return NodeAttrs(f'{lit.value}')
 
     def visit_ForStmt(self, fstmt):
         # return NodeAttrs(f'@ 0x{fstmt.instr_addr:x}')
