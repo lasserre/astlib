@@ -5,7 +5,8 @@ from elftools.elf.elffile import ELFFile
 from elftools.elf.sections import SymbolTableSection
 from elftools.dwarf.dwarfinfo import DWARFInfo, CompileUnit
 from elftools.dwarf.die import DIE
-from elftools.dwarf.descriptions import ExprDumper
+from elftools.dwarf.descriptions import ExprDumper, describe_DWARF_expr
+from elftools.dwarf.locationlists import *
 
 from pathlib import Path
 from typing import Generator, Iterator, Set, List, Any, Dict
@@ -224,6 +225,7 @@ def to_varlib_location(self:DIE):
     loc_str = self.location_str
     if not loc_str:
         return Location(LocationType.Undefined)
+
     if loc_str.startswith('DW_OP_fbreg'):
         cfa_offset = int(loc_str.split(':')[1].strip())
         # NOTE: this assumes 64-bit code where CFA is the stack pointer at the call site
@@ -246,9 +248,19 @@ def to_varlib_location(self:DIE):
 
 def get_die_location(self:DIE):
     d = ExprDumper(self.dwarfinfo.structs)
+    loc_parser = LocationParser(self.dwarfinfo.location_lists())
+
     if 'DW_AT_location' in self.attributes:
-        loc = self.attributes['DW_AT_location'].value
-        return d.dump_expr(loc)
+        loc = loc_parser.parse_from_attribute(self.attributes['DW_AT_location'], self.cu['version'], self)
+        if isinstance(loc, LocationExpr):
+            # simple expression
+            return d.dump_expr(loc.loc_expr)
+        elif isinstance(loc, list):
+            # location list
+            raise Exception(f'Found location list for DIE named {self.name}')
+            # return [(x, d.dump_expr(x.loc_expr)) for x in loc]
+        else:
+            raise Exception(f'Unrecognized location: {loc}')
     return ''
 
 def find_struct_tag(self:DIE) -> DIE:
