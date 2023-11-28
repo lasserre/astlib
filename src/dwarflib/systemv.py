@@ -1,24 +1,96 @@
 from enum import Enum
 from typing import List
 
-from varlib.datatype import DataType, DataTypeCategories
+from varlib.datatype import *
 from varlib.location import Location, LocationType
 
 # CLS: wasn't sure the best place for this but I need to be able to reuse it
 # in various places so it makes sense to come along with dwarflib right now
 
 class ArgClass(Enum):
-    SSE = 1
+    INTEGER = 1
+    SSE = 2
+    SSEUP = 3
+    X87 = 4
+    X87UP = 5
+    COMPLEX_X87 = 6
+    NO_CLASS = 7
+    MEMORY = 8
 
 _builtins_to_argclass = {
-    'double': ArgClass.SSE
+    'double': ArgClass.SSE,
+    'float': ArgClass.SSE,
+
+    # CLS: wait to define long double/float10 - need to test with real cases
+    # 'long double': None,
+    # 'float10': None,
+
+    'uint8_t': ArgClass.INTEGER,
+    'uint16_t': ArgClass.INTEGER,
+    'uint32_t': ArgClass.INTEGER,
+    'uint64_t': ArgClass.INTEGER,
+    'int8_t': ArgClass.INTEGER,
+    'int16_t': ArgClass.INTEGER,
+    'int32_t': ArgClass.INTEGER,
+    'int64_t': ArgClass.INTEGER,
+
+    # CLS: I think these are NOT __m128, but __int128, wait
+    # for a test case to confirm
+    # '__uint128_t': ArgClass.INTEGER,
+    # '__int128_t': ArgClass.INTEGER,
 }
+
+def has_unaligned_fields(st:StructType):
+    # From #1 in section 3.2.3 under aggregate/union types, the wording
+    # "contains unaligned fields" I THINK means that any of the fields
+    # are not 8-byte aligned
+    # TODO: test this out and confirm
+    for offset in st.fields_by_offset.keys():
+        if offset % 8 != 0:
+            return True
+    return False
+
 
 def type_to_argclass(dt:DataType) -> ArgClass:
     if dt.category == DataTypeCategories.BuiltIn:
         if dt.standard_name not in _builtins_to_argclass:
             raise Exception(f'Unmapped builtin type {dt.standard_name}')
         return _builtins_to_argclass[dt.standard_name]
+    elif dt.category == DataTypeCategories.Pointer:
+        return ArgClass.INTEGER
+    elif dt.category == DataTypeCategories.Enum:
+        return ArgClass.INTEGER
+    elif dt.category == DataTypeCategories.Struct:
+        # TODO: temp for verification...
+        if has_unaligned_fields(dt):
+            raise Exception(f'Check my assumption on what unaligned fields means!')
+
+        # NOTE: ignoring the #2) note on C++ objects because we're not doing
+        # those right now...
+
+        # TODO: temp for verification...
+        if dt.size > 32 and dt.size < 64:
+            raise Exception(f'Check this - does GCC push this to MEMORY class or still apply algorithm?')
+
+        if dt.size > 32 or has_unaligned_fields(dt):
+            return ArgClass.MEMORY
+        elif dt.size > 8:
+            # this was very helpful...the standard is confusing and doesn't have enough explanation:
+            # https://stackoverflow.com/questions/65992291/x86-64-system-v-abi-argument-classification-for-parameter-passing
+
+            # essentially, we need to account for every eightbyte in the structure, recursing
+            # down to "terminal nodes" and applying the post merger cleanup to get the final result
+            # (remember, this only happens for structs > 32 bytes, so shouldn't take forever...)
+
+            # TODO: pick up with algorithm here...
+
+            # (if it's too weird/tricky to ask for a specific offset of a struct as we recurse,
+            # we can implement this iteratively instead...)
+
+            pass
+        else:
+            raise Exception(f'Handle other struct case')
+
     raise Exception(f'Unhandled data type category {dt.category}')
 
 class ArgAssigner:
@@ -29,19 +101,41 @@ class ArgAssigner:
     '''
     def __init__(self) -> None:
         self._next_sse_regnum = 0
+        self._next_integer_locs = [
+            Location(LocationType.Register, 'rdi'),
+            Location(LocationType.Register, 'rsi'),
+            Location(LocationType.Register, 'rdx'),
+            Location(LocationType.Register, 'rcx'),
+            Location(LocationType.Register, 'r8'),
+            Location(LocationType.Register, 'r9'),
+        ]
 
     def assign_locations(self, args:List[ArgClass]) -> List[Location]:
         '''
         Convert the list of argument classes into their corresponding locations
         according to the System V x64 ABI
         '''
-        return [self._next_location(x) for x in args]
+        arg_locs = [self._next_location(x) for x in args]
+
+        next_stack_offset = 8
+        for stack_loc in [x for x in arg_locs if x.loc_type == LocationType.Stack]:
+            stack_loc.offset = next_stack_offset
+            next_stack_offset += 8
+
+        return arg_locs
 
     def _next_location(self, argclass:ArgClass):
         '''Returns the location of the next argument (in left-to-right order)'''
         if argclass == ArgClass.SSE:
             return self._next_SSE()
+        elif argclass == ArgClass.INTEGER:
+            return self._next_INTEGER()
         raise Exception(f'Unhandled ArgClass {argclass}')
+
+    def _next_INTEGER(self) -> Location:
+        if self._next_integer_locs:
+            return self._next_integer_locs.pop(0)
+        return self._next_stack()
 
     def _next_SSE(self) -> Location:
         '''Return the location for the next SSE parameter'''
@@ -49,14 +143,12 @@ class ArgAssigner:
             xmm_loc = Location(LocationType.Register, f'XMM{self._next_sse_regnum}')
             self._next_sse_regnum += 1
             return xmm_loc
-        # CLS: if we're out of XMM regs I think we revert to the stack,
-        # maybe confirm this first with a real example...
-        raise Exception(f'Out of XMM registers - confirm we revert to stack')
         return self._next_stack()
 
     def _next_stack(self) -> Location:
         '''Returns the next stack location'''
-        raise Exception(f'TODO: implement _next_stack')
+        # NO OFFSET YET - these actually get pushed in reverse order so we assign offsets last
+        return Location(LocationType.Stack)
 
 def get_sysv_calling_conv(param_types:List[DataType]) -> List[Location]:
     '''
