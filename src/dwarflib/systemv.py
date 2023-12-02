@@ -82,7 +82,24 @@ def type_to_argclass(dt:DataType) -> ArgClass:
             # down to "terminal nodes" and applying the post merger cleanup to get the final result
             # (remember, this only happens for structs > 32 bytes, so shouldn't take forever...)
 
+            ##############################################
             # TODO: pick up with algorithm here...
+            ##############################################
+            # --> have the structure return a list of classes
+            # for each of its eightbytes
+            # --> this is easy to combine with other fields recursively
+            # --> no offset needed, everything is in eightbytes...at the
+            # top level then you know each offset
+            ##############################################
+            print(f'Struct category with size > 8')
+
+            # TODO: pick up here...looks like basically if anything is MEMORY
+            # it "taints" the whole structure to be in memory... (remember these are small structs)
+            # - make this simple, test it out...try and catch the various cases and spot check
+            for offset, field in dt.fields_by_offset.items():
+                field_argclass = type_to_argclass(field.dtype)
+                # if field.size
+
 
             # (if it's too weird/tricky to ask for a specific offset of a struct as we recurse,
             # we can implement this iteratively instead...)
@@ -110,17 +127,26 @@ class ArgAssigner:
             Location(LocationType.Register, 'r9'),
         ]
 
-    def assign_locations(self, args:List[ArgClass]) -> List[Location]:
+    def assign_locations(self, param_types:List[DataType]) -> List[Location]:
         '''
         Convert the list of argument classes into their corresponding locations
         according to the System V x64 ABI
         '''
-        arg_locs = [self._next_location(x) for x in args]
+        arg_classes = [type_to_argclass(dt) for dt in param_types]
+        arg_locs = [self._next_location(x) for x in arg_classes]
 
         next_stack_offset = 8
-        for stack_loc in [x for x in arg_locs if x.loc_type == LocationType.Stack]:
+        for i, stack_loc in enumerate(arg_locs):
+            if stack_loc.loc_type != LocationType.Stack:
+                continue
             stack_loc.offset = next_stack_offset
-            next_stack_offset += 8
+
+            # calculate next stack offset based on size of data aligned to 8B
+            data_size = param_types[i].size
+            if data_size % 8 != 0:
+                # align to 8B boundary
+                data_size = (data_size/8 + 1) * 8
+            next_stack_offset += data_size
 
         return arg_locs
 
@@ -163,5 +189,4 @@ def get_sysv_calling_conv(param_types:List[DataType]) -> List[Location]:
     # 1. classify each argument type
     # 2. assign argument location left-to-right based on classification
 
-    arg_classes = [type_to_argclass(dt) for dt in param_types]
-    return ArgAssigner().assign_locations(arg_classes)
+    return ArgAssigner().assign_locations(param_types)
