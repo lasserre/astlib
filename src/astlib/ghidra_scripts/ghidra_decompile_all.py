@@ -66,17 +66,25 @@ validation_mode = 'VALIDATE' in args
 subset_file = args[1] if len(args) == 2 else None
 exclude_file = args[2] if len(args) == 3 else None
 
+######----------------------------------
+# read config json
+######----------------------------------
+if 'GHIDRA_AST_CONFIG_FILE' not in os.environ:
+    print('Error: GHIDRA_AST_CONFIG_FILE environment variable not set!')
+    exit(1)
+
+configfile = os.environ['GHIDRA_AST_CONFIG_FILE']
+with open(configfile, 'r') as f:
+    config = json.load(f)
+
+exportfolder = config['output_folder']
+
+######----------------------------------
+# validation mode: exclude/include funcs
+######----------------------------------
 if validation_mode:
     print('RUNNING VALIDATION')
-    if 'GHIDRA_AST_CONFIG_FILE' not in os.environ:
-        print('Error: GHIDRA_AST_CONFIG_FILE environment variable not set!')
-        exit(1)
 
-    configfile = os.environ['GHIDRA_AST_CONFIG_FILE']
-    with open(configfile, 'r') as f:
-        config = json.load(f)
-
-    exportfolder = config['output_folder']
     ghidra_outfolder = os.path.join(exportfolder, 'GhidraCode')
     if not os.path.exists(ghidra_outfolder):
         os.mkdir(ghidra_outfolder)
@@ -116,6 +124,11 @@ if subset_file:
 if exclude_file:
     funcs_to_decompile = (x for x in nonthunks if x.getName() not in exclude_funcs)
 
+failed_decompilations = []
+
+######----------------------------------
+# decompile and export ASTs
+######----------------------------------
 for f in funcs_to_decompile:
     # don't skip if we have been given a specific subset
     if not subset_file and skip_counter < SKIP_COUNT:
@@ -127,6 +140,7 @@ for f in funcs_to_decompile:
     if not res.decompileCompleted():
         print('Decompilation failed:')
         print(res.getErrorMessage())
+        failed_decompilations.append(address)
         continue
 
     if validation_mode:
@@ -141,3 +155,10 @@ for f in funcs_to_decompile:
 
     if max_counter % 500 == 0:
         print('Exported {} functions...'.format(max_counter))
+
+######----------------------------------
+# log addresses of failed decompilations
+######----------------------------------
+if failed_decompilations:
+    with open(os.path.join(exportfolder, 'failed_decompilations.txt'), 'w') as faildecomps_file:
+        faildecomps_file.write('\n'.join('{:x}'.format(x) for x in failed_decompilations))
