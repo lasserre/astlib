@@ -241,7 +241,8 @@ class StructType(DataType):
         return True
 
     def __hash__(self):
-        return hash(tuple(self.fields_by_offset.values()))
+        # have to sort keys to guarantee that hash is consistent
+        return hash(tuple([self.fields_by_offset[k] for k in sorted(self.fields_by_offset.keys())]))
 
 class RecursiveStructType(StructType):
     '''
