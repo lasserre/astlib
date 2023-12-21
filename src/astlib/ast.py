@@ -75,6 +75,21 @@ def to_varlib_dtype(node:ASTNode, parent:datatype.DataType=None) -> datatype.Dat
 
     return None     # not a data type AST node
 
+_statement_node_kinds = [
+    'BreakStmt',
+    'CaseStmt',
+    # 'CompoundStmt'    # not really...this is just a container of statements
+    'DeclStmt',
+    'DoStmt',
+    'ForStmt',
+    'GotoStmt',
+    'IfStmt',
+    'LabelStmt',
+    'ReturnStmt',
+    'SwitchStmt',
+    'WhileStmt'
+]
+
 def _new_astnode_class_from_dict(d:Dict):
     '''
     Creates a new class derived from ASTNode with a classname matching
@@ -158,7 +173,13 @@ def _new_astnode_class_from_dict(d:Dict):
 
         @property
         def is_statement(self) -> bool:
-            return self.kind == 'BinaryOperator' and self.opcode == '='
+            # examples:
+            # x = y;
+            # my_func();
+            # for (i = 0; i < DECLREF; i++)
+            return (self.kind == 'BinaryOperator' and self.opcode == '=') \
+                or (self.kind == 'CallExpr' and self.parent.kind == 'CompoundStmt') \
+                or self.kind in _statement_node_kinds
 
         @property
         def dtype_varlib(self) -> datatype.DataType:
