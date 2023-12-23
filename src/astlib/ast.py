@@ -178,7 +178,7 @@ def _new_astnode_class_from_dict(d:Dict):
             # my_func();
             # for (i = 0; i < DECLREF; i++)
             return (self.kind == 'BinaryOperator' and self.opcode == '=') \
-                or (self.kind == 'CallExpr' and self.parent.kind == 'CompoundStmt') \
+                or (self.kind == 'CallExpr' and self.parent and self.parent.kind == 'CompoundStmt') \
                 or self.kind in _statement_node_kinds
 
         @property

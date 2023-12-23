@@ -42,6 +42,11 @@ class DataType:
         '''Size of this data type in bytes'''
         raise NotImplementedError(f'size property not implemented in {self.__class__}')
 
+    @property
+    def type_sequence(self) -> str:
+        '''Returns the data type sequence as a CSV string'''
+        raise NotImplementedError(f'type_sequence property not implemented in {self.__class__}')
+
 _standard_floats = {
     4: 'float',
     8: 'double',
@@ -128,6 +133,10 @@ class BuiltinType(DataType):
     def size(self) -> int:
         return self._size
 
+    @property
+    def type_sequence(self) -> str:
+        return self.standard_name
+
 class PointerType(DataType):
     '''
     Pointer types
@@ -144,6 +153,10 @@ class PointerType(DataType):
     @property
     def size(self):
         return self.pointer_size
+
+    @property
+    def type_sequence(self) -> str:
+        return f'PTR,{self.pointed_to.type_sequence}'
 
     def __str__(self):
         if self.pointed_to.category == DataTypeCategories.Function:
@@ -176,6 +189,10 @@ class ArrayType(DataType):
     @property
     def size(self):
         return self.num_elements * self.element_type.size if self.num_elements else 0
+
+    @property
+    def type_sequence(self) -> str:
+        return f'ARR,{self.element_type.type_sequence}'
 
     def __str__(self):
         len_str = self.num_elements if self.num_elements else ''
@@ -226,6 +243,10 @@ class StructType(DataType):
     @property
     def size(self):
         return sum(f.size for f in self.fields_by_offset.values())
+
+    @property
+    def type_sequence(self) -> str:
+        return 'STRUCT'
 
     def __str__(self):
         return self.name
@@ -301,6 +322,10 @@ class UnionType(DataType):
     def size(self):
         return max(f.size for f in self.fields)
 
+    @property
+    def type_sequence(self) -> str:
+        return 'UNION'
+
     def __str__(self):
         return self.name
 
@@ -348,6 +373,10 @@ class EnumType(DataType):
     def size(self):
         return self.dt_size
 
+    @property
+    def type_sequence(self) -> str:
+        return 'ENUM'
+
     def __str__(self):
         return self.name
 
@@ -379,6 +408,10 @@ class FunctionPrototype(DataType):
     @property
     def size(self):
         return 0    # this should have a pointer parent, whose size is meaningful
+
+    @property
+    def type_sequence(self) -> str:
+        return 'FUNC'
 
     def __str__(self):
         # assumes function pointer
