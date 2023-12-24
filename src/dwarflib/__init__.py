@@ -259,7 +259,8 @@ def get_die_location(self:DIE):
             return d.dump_expr(loc.loc_expr)
         elif isinstance(loc, list):
             # location list
-            raise Exception(f'Found location list for DIE named {self.name}')
+            return ''
+            # raise Exception(f'Found location list for DIE named {self.name}')
             # return [(x, d.dump_expr(x.loc_expr)) for x in loc]
         else:
             raise Exception(f'Unrecognized location: {loc}')
@@ -389,7 +390,10 @@ class DwarfDebugInfo:
 
     def _build_funcdies_by_addr(self):
         for fdie in self.get_function_dies():
-            self.funcdies_by_addr[fdie.low_pc] = fdie
+            if fdie.low_pc is not None:
+                self.funcdies_by_addr[fdie.low_pc] = fdie
+            # else:
+            #     print(f'Skipping function {fdie.name} since it has no low_pc address')
 
     def _build_lineinfo_lookup(self):
         if self.lineinfo_lookup:
