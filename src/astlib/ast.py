@@ -47,9 +47,9 @@ def to_varlib_dtype(node:ASTNode) -> datatype.DataType:
             utype.fields = [datatype.StructField(to_varlib_dtype(f.dtype), f.name) for f in node.fields]
             return utype
         else:
-            recursive_stype = datatype.check_recursive_struct_ref(node.name)
-            if recursive_stype:
-                return recursive_stype
+            # --------------------------------------------
+            # TODO: re-implement the StructType part like dwarflib did using StructDatabase
+            # --------------------------------------------
             stype = datatype.StructType({}, node.name)
             dt_fields = {off: datatype.StructField(to_varlib_dtype(f.dtype), f.name) for off, f in node.fields_by_offset.items()}
             stype.fields_by_offset = dt_fields

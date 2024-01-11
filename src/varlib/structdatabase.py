@@ -1,19 +1,6 @@
-from typing import List, Dict
+from typing import List, Dict, Iterable
 
 from .structlayout import *
-
-# Wait, I think maybe the issue is this whole recursive check altogether. If we
-# adjust the algorithm, I think we can avoid it completely as well as fix our current
-# problem
-# TODO: when you see a new structure type, MAP IT FIRST **before** defining
-# the members
-# --> that way, if a member eventually leads to a recursive definition
-#     that refers to itself (via pointer), it is already mapped and you just
-#     return a reference to it
-# --> this also means we should be dealing with one definition of the struct,
-#     not making multiple copies (otherwise, not everyone gets the full definition/right version!)
-# --> STRUCTS ARE UNIQUE FOR (translation unit, name) TUPLES
-#     (and can be shared across translation units...just have to check against contents)
 
 class StructDatabase:
     '''
@@ -49,6 +36,73 @@ class StructDatabase:
         if tuid not in self.sid_by_tu_and_name:
             self.sid_by_tu_and_name[tuid] = {}
         self.sid_by_tu_and_name[tuid][name] = sid
+
+    def remap_structure_ids(self, walk_types:Iterable):
+        sid_remap = self._remap_db_structure_ids()
+
+        # remap each of the provided data types to match the new database ids
+        for dt in walk_types:
+            dt._remap_sids(sid_remap)
+
+    def _remap_db_structure_ids(self) -> Dict[int, int]:
+        '''
+        Remaps the structure ids in this database, and returns the sid_remap which
+        maps old_sid: new_sid for all the original sids in the database.
+
+        FOR THIS TO WORK PROPERLY, THE CLIENT MUST IMMEDIATELY VISIT ALL
+        DataType objects created via this database and call dt._remap_sids() with
+        the sid_remap returned by this function.
+
+        Once that is complete, the database and all of the DataType objects referencing
+        structs within it should be essentially rebased to a disjoint set of ids
+        as well as consolidated such that one ID corresponds to one struct with
+        the same name and layout (instead of one ID for name/translation unit)
+        '''
+        # guarantee disjoint id set (start above self._next_sid somewhere)
+        # guarantee each sid that currently exists is in the remap
+        remap_base_id = self._next_sid + 1000
+        remap_base_id -= (remap_base_id % 100)
+        next_new_id = remap_base_id
+
+        new_structs_by_id = {}
+        sid_remap = {}
+
+        # split into unique sets based on actual layout/name
+        for sname, old_sids in self.sids_by_name.items():
+            # partition based on definition (dict keys will collect same definitions together)
+            d:Dict[StructDefinition, List[int]] = {}  # maps sdef: list of old ids
+
+            for x in old_sids:
+                sdef = self.structs_by_id[x]
+                if sdef not in d:
+                    d[sdef] = [x]
+                else:
+                    d[sdef].append(x)
+
+            for sdef in d.keys():
+                new_structs_by_id[next_new_id] = sdef
+                for x in d[sdef]:
+                    sid_remap[x] = next_new_id
+                next_new_id += 1
+
+        # overwrite with new version of structs_by_id
+        self.structs_by_id = new_structs_by_id
+
+        # for consistency:
+        # remap sids_by_name
+        new_sids_by_name = {}
+        for sname, old_sids in self.sids_by_name.items():
+            new_ids = list(set([sid_remap[x] for x in old_sids]))
+            new_sids_by_name[sname] = new_ids
+        self.sids_by_name = new_sids_by_name
+
+        # remap self.sid_by_tu_and_name?
+        # CLS: I don't think we ever need this again...if so, I can
+        # change this to actually remap it instead of zero it out :)
+        self.sid_by_tu_and_name = {}
+
+        return sid_remap
+
 
     # TODO: if we want to, just define a consolidate_duplicates()
     #

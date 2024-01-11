@@ -26,6 +26,19 @@ class DataType:
     def __init__(self, category:str) -> None:
         self.category = category
 
+    def _remap_sids(self, sid_remap:Dict[int,int]):
+        '''
+        Remap any StructTypes contained within this type, or do nothing if not applicable
+
+        sid_remap: Mapping of old_sid: new_sid for each sid in the database (identity maps
+                   will be used if no actual change is desired)
+
+        Guarantees:
+        - new ids are outside the range of old ids, so any observed old ids (sid_remap.keys())
+          will not collide with any new ids (sid_remap.values())
+        '''
+        raise NotImplementedError(f'_remap_sids not implemented in {self.__class__}')
+
     @property
     def inner(self) -> List['DataType']:
         '''List of nested DataType components (mimics AST structure)'''
@@ -79,6 +92,9 @@ class BuiltinType(DataType):
         self.signed = signed
         self._size = size
 
+    def _remap_sids(self, sid_remap:Dict[int,int]):
+        return  # N/A
+
     @property
     def standard_name(self) -> str:
         '''
@@ -100,7 +116,7 @@ class BuiltinType(DataType):
     def __str__(self):
         return self.standard_name
 
-    def __eq__(self, other):
+    def __eq__(self, other, dtchain:List[str]=[]):
         if not isinstance(other, BuiltinType):
             return False
         return self.floating_point == other.floating_point and \
@@ -140,6 +156,9 @@ class PointerType(DataType):
         self.pointed_to = pointed_to
         self.pointer_size = pointer_size
 
+    def _remap_sids(self, sid_remap:Dict[int,int]):
+        self.pointed_to._remap_sids(sid_remap)
+
     @property
     def inner(self):
         return [self.pointed_to]
@@ -159,10 +178,11 @@ class PointerType(DataType):
             return str(self.pointed_to)
         return f'{self.pointed_to}*'
 
-    def __eq__(self, other):
+    def __eq__(self, other, dtchain:List[str]=[]):
         if not isinstance(other, PointerType):
             return False
-        return self.pointed_to == other.pointed_to
+        # pass the dtchain along, but we don't need to add anything to it
+        return self.pointed_to.__eq__(other.pointed_to, dtchain)
 
     def __hash__(self):
         return hash((self.pointed_to,))
@@ -175,6 +195,9 @@ class ArrayType(DataType):
         super().__init__(DataTypeCategories.Array)
         self.element_type = element_type
         self.num_elements = num_elements
+
+    def _remap_sids(self, sid_remap:Dict[int,int]):
+        self.element_type._remap_sids(sid_remap)
 
     @property
     def inner(self):
@@ -192,10 +215,12 @@ class ArrayType(DataType):
         len_str = self.num_elements if self.num_elements else ''
         return f'{self.element_type}[{len_str}]'
 
-    def __eq__(self, other):
+    def __eq__(self, other, dtchain:List[str]=[]):
         if not isinstance(other, ArrayType):
             return False
-        return self.num_elements == other.num_elements and self.element_type == other.element_type
+        # pass the dtchain along, we don't need to add anything though
+        return self.num_elements == other.num_elements and \
+               self.element_type.__eq__(other.element_type, dtchain)
 
     def __hash__(self):
         return hash((self.num_elements, self.element_type))
@@ -261,11 +286,11 @@ class StructField:
     def __str__(self):
         return f'{self.dtype} {self.name}'
 
-    def __eq__(self, other):
+    def __eq__(self, other, dtchain:List[str]=[]):
         if not isinstance(other, StructField):
             return False
         # NOTE: field name is not part of the comparison, just for readability
-        return self.dtype == other.dtype
+        return self.dtype.__eq__(other.dtype, dtchain)
 
     def __hash__(self):
         return hash((self.dtype,))
@@ -278,6 +303,10 @@ class UnionType(DataType):
         super().__init__(DataTypeCategories.Union)
         self.fields = fields
         self.name = name
+
+    def _remap_sids(self, sid_remap:Dict[int,int]):
+        for f in self.fields:
+            f.dtype._remap_sids(sid_remap)
 
     @property
     def size(self):
@@ -293,7 +322,7 @@ class UnionType(DataType):
     def __hash__(self):
         return hash(tuple(self.fields))
 
-    def __eq__(self, other):
+    def __eq__(self, other, dtchain:List[str]=[]):
         if not isinstance(other, UnionType):
             return False
 
@@ -302,33 +331,43 @@ class UnionType(DataType):
         # don't have duplicates that are "collapsing down" within the set
         # (if so, we would need to make sure that the same duplicates exist in both
         # sets of fields)
-        if len(self.fields) != len(set(self.fields)):
-            # we have duplicates
-            if len(self.fields) != len(other.fields):
-                return False
 
-            other_fieldlist = list(other.fields)
-            pop_other = False
-            for f in self.fields:
-                for o in other_fieldlist:
-                    if f == o:
-                        pop_other = True
-                        break
-                if pop_other:
-                    other_fieldlist.remove(o)
-                    pop_other = False
-                else:
-                    return False    # went through all remaining other_fieldlist and no match
-            return True     # all fields matched a field in other
-        else:
-            # no duplicates, simple set comparison (hopefully this is normal case)
-            return set(self.fields) == set(other.fields)
+        if len(self.fields) != len(other.fields):
+            return False
+
+        dtchain_name = f'Union_{self.name}'
+        if dtchain_name in dtchain:
+            return True     # we have cycled around - we are equal
+
+        dtchain.append(dtchain_name)
+
+        other_fieldlist = list(other.fields)
+        pop_other = False
+        is_equal = True
+        for f in self.fields:
+            for o in other_fieldlist:
+                if f.__eq__(o, dtchain):
+                    pop_other = True
+                    break
+            if pop_other:
+                other_fieldlist.remove(o)
+                pop_other = False
+            else:
+                is_equal = False
+                break
+
+        dtchain.pop()   # remove self.name
+        return is_equal
+
 
 class EnumType(DataType):
     def __init__(self, name:str, dt_size:int=4) -> None:
         super().__init__(DataTypeCategories.Enum)
         self.name = name
         self.dt_size = dt_size  # don't know if we need this, assume 4B int for now
+
+    def _remap_sids(self, sid_remap:Dict[int,int]):
+        return  # N/A
 
     @property
     def size(self):
@@ -341,7 +380,7 @@ class EnumType(DataType):
     def __str__(self):
         return self.name
 
-    def __eq__(self, other):
+    def __eq__(self, other, dtchain:List[str]=[]):
         if not isinstance(other, EnumType):
             return False
 
@@ -363,10 +402,16 @@ class FunctionPrototype(DataType):
     like prototype recovery - but the main purpose is to represent the prototype
     portion of a function pointer type.
     '''
-    def __init__(self, return_dtype:DataType, params:List[DataType]) -> None:
+    def __init__(self, return_dtype:DataType, params:List[DataType], name:str) -> None:
         super().__init__(DataTypeCategories.Function)
         self.return_dtype = return_dtype
         self.params = params
+        self.name = name
+
+    def _remap_sids(self, sid_remap:Dict[int,int]):
+        self.return_dtype._remap_sids(sid_remap)
+        for p in self.params:
+            p._remap_sids(sid_remap)
 
     @property
     def size(self):
@@ -380,10 +425,35 @@ class FunctionPrototype(DataType):
         # assumes function pointer
         return f'{self.return_dtype} (*)({",".join(str(p) for p in self.params)})'
 
-    def __eq__(self, other):
+    def __eq__(self, other, dtchain:List[str]=[]):
         if not isinstance(other, FunctionPrototype):
             return False
-        return self.return_dtype == other.return_dtype and set(self.params) == set(other.params)
+
+        if self.name != other.name:
+            return False
+
+        dtchain_name = f'Funcproto_{self.name}'
+        if dtchain_name in dtchain:
+            return True     # we have cycled around - we are equal
+
+        dtchain.append(dtchain_name)
+
+        if not self.return_dtype.__eq__(other.return_dtype, dtchain):
+            dtchain.pop()
+            return False
+
+        # params
+        if len(self.params) != len(other.params):
+            dtchain.pop()
+            return False
+
+        for i, p in enumerate(self.params):
+            if not p.__eq__(other.params[i], dtchain):
+                dtchain.pop()
+                return False
+
+        dtchain.pop()
+        return True
 
     def __hash__(self):
-        return hash((self.return_dtype, *self.params))
+        return hash((self.name, self.return_dtype, *self.params))

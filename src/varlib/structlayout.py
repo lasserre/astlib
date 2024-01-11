@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, List
 
 from .datatype import StructField
 
@@ -20,7 +20,7 @@ class StructLayout:
     def __init__(self, fields_by_offset:Dict[int, StructField] = {}) -> None:
         self.fields_by_offset:Dict[int, StructField] = fields_by_offset
 
-    def __eq__(self, other):
+    def __eq__(self, other, dtchain:List[str]=[]):
         '''
         NOTE: breaking StructLayout out as its own class separate from StructDefinition
               allows us to implement equality in terms of layout content only, not the
@@ -32,7 +32,7 @@ class StructLayout:
         if set(self.fields_by_offset.keys()) != set(other.fields_by_offset.keys()):
             return False    # set of member offsets don't match
         for off, field in self.fields_by_offset.items():
-            if field != other.fields_by_offset[off]:
+            if not field.__eq__(other.fields_by_offset[off], dtchain):
                 return False
         return True
 
@@ -57,14 +57,24 @@ class StructDefinition:
         self.name = name
         self.layout = layout
 
-    def __eq__(self, other):
+    def __eq__(self, other, dtchain:List[str]=[]):
         if not isinstance(other, StructDefinition):
             return False
         if self.name != other.name:
             return False
-        if self.layout != other.layout:
-            return False
-        return True
+
+        dtchain_name = f'Struct_{self.name}'
+        if dtchain_name in dtchain:
+            return True     # we have cycled around - we are equal
+
+        dtchain.append(dtchain_name)
+        is_equal = True
+
+        if not self.layout.__eq__(other.layout, dtchain):
+            is_equal = False
+
+        dtchain.pop()
+        return is_equal
 
     def __hash__(self):
         return hash(self.name)      # these tend to be unique for structures...
