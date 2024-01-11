@@ -50,30 +50,38 @@ class StructDatabase:
             self.sid_by_tu_and_name[tuid] = {}
         self.sid_by_tu_and_name[tuid][name] = sid
 
+    # TODO: if we want to, just define a consolidate_duplicates()
+    #
+    # def consolidate_duplicates()
+    #
+    # - go through all the entries which share names (each list in sids_by_name.values())
+    #   and group all of the identical definitions together
+    #   -> IMPLEMENTATION: since I implemented __hash__ and __eq__, I think I can make a dictionary
+    #      USING THE DEFINITIONS AS KEYS and test "sdef in dict"
+    # - for all the sids whose definitions were identical, just map all those ids to
+    #   one shared definition (pick one to keep)
+    #   -> I can't get rid of the extra sids without processing whoever used it...which I can't know
+    #      unless we do some kind of export where I am allowed to remap sids (idk that it matters much)
+
+    def map_struct_type_empty(self, tuid:str, name:str) -> int:
+        '''
+        Same as map_struct_type, but creates an empty StructureDefinition with the
+        given name and returns the assigned sid
+        '''
+        return self.map_struct_type(tuid, StructDefinition(name, StructLayout()))
+
     def map_struct_type(self, tuid:str, sdef:StructDefinition) -> int:
         '''
         Maps stype into the given translation unit and returns the sid for the
         resulting structure.
 
         This should only be called if get_sid() returns -1.
-
-        This may return an existing sid if the StructType compares as equal to
-        an existing struct definition WITH THE SAME NAME (this should be common).
-        This is how we reconcile that a structure used across translation units
-        is the same one (e.g. data.h is included in multiple .c files and defines the
-        same struct everyone uses called DataStruct)
         '''
-        # do we have structs by this name already? if so, verify this one is
-        # actually different
-        if sdef.name in self.sids_by_name:
-            for existing_sid in self.sids_by_name[sdef.name]:
-                if self.structs_by_id[existing_sid] == sdef:
-                    # we have a match - this is the same struct!
-                    # just map the existing sid inside this tuid
-                    self._map_struct_by_tu_and_name(tuid, sdef.name, existing_sid)
-                    return existing_sid
+        # NOTE: I don't think we can consolidate duplicate definitions across translation units
+        # at this point, since map_struct_type() is called BEFORE the StructDefinition is
+        # filled out (and that is by design to avoid recursion issues)
 
-        # this is new...either brand new name or a unique def for an existing name
+        # assume this is a new type...either brand new name or a unique def for an existing name
         # --> map as new type
         new_sid = self._next_sid
         self._next_sid += 1
@@ -89,9 +97,5 @@ class StructDatabase:
             self.sids_by_name[sdef.name] = [new_sid]
         else:
             self.sids_by_name[sdef.name].append(new_sid)
-
-            # CLS: if this never happens, we could simplify this logic and assume names are
-            # globally unique for a binary
-            print(f'MAPPING DUPLICATE STRUCT (name={sdef.name}, sids={self.sids_by_name[sdef.name]})')
 
         return new_sid

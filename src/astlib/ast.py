@@ -30,7 +30,7 @@ def to_varlib_location(node:ASTNode) -> location.Location:
     loc_off = node.loc_off if loc_type != location.LocationType.Register else 0
     return location.Location(loc_type, node.loc_reg, loc_off)
 
-def to_varlib_dtype(node:ASTNode, parent:datatype.DataType=None) -> datatype.DataType:
+def to_varlib_dtype(node:ASTNode) -> datatype.DataType:
     '''
     Converts the AST Type node to its corresponding varlib data type, or
     returns None if the node is not a data type node.
@@ -38,38 +38,38 @@ def to_varlib_dtype(node:ASTNode, parent:datatype.DataType=None) -> datatype.Dat
     if node.kind == 'BuiltinType':
         return datatype.BuiltinType(node.name, node.is_floating_point, node.is_signed, node.size)
     elif node.kind == 'PointerType':
-        ptype = datatype.PointerType(None, node.size, parent)
-        ptype.pointed_to = to_varlib_dtype(node.inner[0], parent=ptype)
+        ptype = datatype.PointerType(None, node.size)
+        ptype.pointed_to = to_varlib_dtype(node.inner[0])
         return ptype
     elif node.kind == 'StructType':
         if node.is_union:
-            utype = datatype.UnionType([], node.name, parent)
-            utype.fields = [datatype.StructField(to_varlib_dtype(f.dtype, parent=utype), f.name) for f in node.fields]
+            utype = datatype.UnionType([], node.name)
+            utype.fields = [datatype.StructField(to_varlib_dtype(f.dtype), f.name) for f in node.fields]
             return utype
         else:
-            recursive_stype = datatype.check_recursive_struct_ref(node.name, parent)
+            recursive_stype = datatype.check_recursive_struct_ref(node.name)
             if recursive_stype:
                 return recursive_stype
-            stype = datatype.StructType({}, node.name, parent)
-            dt_fields = {off: datatype.StructField(to_varlib_dtype(f.dtype, parent=stype), f.name) for off, f in node.fields_by_offset.items()}
+            stype = datatype.StructType({}, node.name)
+            dt_fields = {off: datatype.StructField(to_varlib_dtype(f.dtype), f.name) for off, f in node.fields_by_offset.items()}
             stype.fields_by_offset = dt_fields
             return stype
     elif node.kind == 'ConstantArrayType':
-        atype = datatype.ArrayType(None, num_elements=node.num_elements, parent=parent)
-        atype.element_type = to_varlib_dtype(node.inner[0], parent=atype)
+        atype = datatype.ArrayType(None, num_elements=node.num_elements)
+        atype.element_type = to_varlib_dtype(node.inner[0])
         return atype
     elif node.kind == 'VoidType':
         return datatype.BuiltinType('void', False, False, 0)
     elif node.kind == 'EnumType':
         return datatype.EnumType(node.name)
     elif node.kind == 'FunctionType':
-        fptype = datatype.FunctionPrototype(None, [], parent)
-        fptype.return_dtype = to_varlib_dtype(node.return_dtype, parent=fptype)
-        fptype.params = [to_varlib_dtype(p, parent=fptype) for p in node.inner]
+        fptype = datatype.FunctionPrototype(None, [])
+        fptype.return_dtype = to_varlib_dtype(node.return_dtype)
+        fptype.params = [to_varlib_dtype(p) for p in node.inner]
         return fptype
     elif node.kind == 'TypedefType':
         # convert to canonical type (remove typdefs)
-        return to_varlib_dtype(node.decl.inner[0], parent=parent)
+        return to_varlib_dtype(node.decl.inner[0])
     elif node.kind.endswith('Type'):
         raise Exception(f'Unhandled AST type node "{node.kind}"')
 

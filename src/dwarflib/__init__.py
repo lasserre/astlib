@@ -13,7 +13,7 @@ from typing import Generator, Iterator, Set, List, Any, Dict
 
 from varlib.datatype import *
 from varlib.location import *
-from varlib import StructDatabase
+from varlib import *
 
 from .systemv import *
 
@@ -26,34 +26,6 @@ def ghidra_to_dwarf_addr(ghidra_addr:int):
 def dwarf_to_ghidra_addr(dwarf_addr:int):
     '''Adjust for Ghidra's default image base'''
     return dwarf_addr + GHIDRA_ELF_IMAGE_BASE_DEFAULT_x64
-
-class StructMember:
-    def __init__(self, name:str, dtype:str, offset:int, size:int) -> None:
-        self.name = name
-        self.dtype = dtype
-        self.offset = offset
-        self.size = size
-
-# TODO: build a non-relocatable version...do DST symbols go away??
-
-    def __str__(self) -> str:
-        return f'[0x{self.offset:x}] {self.dtype} {self.name}'
-
-    def __repr__(self) -> str:
-        return str(self)
-
-class StructLayout:
-    def __init__(self, name:str, members:List[StructMember]) -> None:
-        self.name = name
-        self.members = members
-
-    def __str__(self) -> str:
-        sep = '\n '
-        return f'STRUCT {self.name}\n {sep.join([str(m) for m in self.members])}'.strip()
-
-    def __repr__(self) -> str:
-        return str(self)
-
 
 # Foo.b = property(lambda self: self.a + 1)
 def die_property(attr_name:str, default_value:Any):
@@ -129,12 +101,16 @@ def get_die_typename(self:DIE):
     raise Exception(f'TODO: {type_die.tag}')
     # return f'TODO: {type_die.tag}'
 
-# current struct importer (set via DwarfStructImporter class)
-# holds the struct mapping state during import from DWARF to varlib
-# to allow us to reuse already-defined struct definitions, etc
+# current struct database (set via UseStructDatabase class)
+# holds the current struct database during import from DWARF to varlib
 _struct_db:StructDatabase = None
 
 class UseStructDatabase:
+    '''
+    Convenience 'with' statement wrapper to set/clear the dwarflib _struct_db
+    global when we are converting DWARF types to varlib types and storing
+    structures within this da
+    '''
     def __init__(self, db:StructDatabase):
         self.db = db
 
@@ -147,82 +123,52 @@ class UseStructDatabase:
         global _struct_db
         _struct_db = None     # reset
 
-def memberDIE_to_varlib(mdie:DIE, parent=None):
+def memberDIE_to_varlib(mdie:DIE):
     KEY = 'DW_AT_data_member_location'
     offset = mdie.attributes[KEY].value if KEY in mdie.attributes else 0
-    return (offset, StructField(dtype=to_varlib_dtype(mdie, parent), name=mdie.name))
+    return (offset, StructField(dtype=to_varlib_dtype(mdie), name=mdie.name))
 
-def structDIE_to_varlib(sdie:DIE, name:str, parent=None):
+def get_layout_from_structDIE(sdie:DIE) -> StructLayout:
+    '''
+    Converts the DW_TAG_structure_type DIE to a StructLayout by processing its DW_TAG_member children
+    '''
+    member_dies = [memberDIE_to_varlib(mdie) for mdie in sdie.iter_children() if mdie.tag == 'DW_TAG_member']
+    return StructLayout({x[0]: x[1] for x in member_dies})
+
+def structDIE_to_varlib(sdie:DIE, name:str):
     global _struct_db
 
-    # recursive = check_recursive_struct_ref(name, parent)
-    # if recursive:
-    #     return recursive
-
-
-    # Wait, I think maybe the issue is this whole recursive check altogether. If we
-    # adjust the algorithm, I think we can avoid it completely as well as fix our current
-    # problem
-    # TODO: when you see a new structure type, MAP IT FIRST **before** defining
-    # the members
-    # --> that way, if a member eventually leads to a recursive definition
-    #     that refers to itself (via pointer), it is already mapped and you just
-    #     return a reference to it
-    # --> this also means we should be dealing with one definition of the struct,
-    #     not making multiple copies (otherwise, not everyone gets the full definition/right version!)
-    # --> STRUCTS ARE UNIQUE FOR (translation unit, name) TUPLES
-    #     (and can be shared across translation units...just have to check against contents)
-
     is_fwd_decl = 'DW_AT_declaration' in sdie.attributes
-
-    # CLS: for now, don't look up or map forward-declarations - just return
-    # StructType objects with is_fwd_decl=True and default/invalid sid
-    # if is_fwd_decl:
-    #     stype = StructType(fields_by_offset={}, name=name, parent=parent)
-    #     stype.is_fwd_decl = is_fwd_decl
-    #     return stype
-
-    tuid = sdie.cu.get_top_DIE().name
+    # tuid = sdie.cu.get_top_DIE().name
+    tuid = ''   # try without differentiating by TU
 
     sid = _struct_db.get_sid(tuid, name)
+
     if sid == -1:
         # unmapped type - need to define it
-
-        # TODO: define the new structure definition
-        # 1. create it
-        # 2. map it
-        # 3. define the fields (DO THIS LAST - THIS ALLOWS US TO HANDLE RECURSIVE DEFS)
-        pass
+        sid = _struct_db.map_struct_type_empty(tuid, name)      # 1. map a new structure with this name (creates sid)
+        stype = StructType(_struct_db, sid)                     # 2. NOW define fields (after mapping to prevent recursion issues)
+        stype.layout = get_layout_from_structDIE(sdie)
+        return stype
     else:
-        # already exists!
-        # TODO: if sid we get back is EMPTY (forward decl) and this sdie is a real definition,
-        # then we need to update the existing sid with this definition!
-        # TODO - set a breakpoint here to verify this happens like I expect...
-        pass
+        stype = StructType(_struct_db, sid)     # get existing type from sid
+        if stype.empty and not is_fwd_decl:
+            # existing type has no fields (is a fwd decl), but this DIE
+            # actually has the real definition --> update the layout in the database
 
-    stype = _struct_db.get_struct_type(tuid, name)
-    if not stype or (stype.size == 0 and not is_fwd_decl):
-        new_stype = StructType(fields_by_offset={}, name=name, parent=parent)
-        new_stype.is_fwd_decl = is_fwd_decl
-        member_dies = [memberDIE_to_varlib(x, parent=new_stype) for x in sdie.iter_children() if x.tag == 'DW_TAG_member']
-        new_stype.fields_by_offset = {x[0]: x[1] for x in member_dies}
+            # NOTE: this is a microcasm of the bigger problem - if I don't
+            # "map" the fact that layout is being set FIRST, I will still recurse
+            # here forever if this layout is recursive!
+            # -> set a dummy member here to indicate we have a layout (actually set below)
+            stype.layout = StructLayout({0: StructField(BuiltinType.create_void_type(), 'DUMMY')})
 
-        if stype and stype.size == 0:   # fwd decl already existed
-            if new_stype.size > 0:
-                # original stype was a forward-decl and this is the actual definition
-                # -> let's update the definition
-                # NOTE: this won't update previously-defined forward-declared versions of this
-                # StructType!! But as long as our "database" ends up with the full definition
-                # we can use that as the defining type
-                _struct_db.update_struct_type(stype.sid, new_stype)
-            else:
-                return stype    # new_stype is just another fwd decl - don't remap it
+            # now that stype.empty will return FALSE if we have a recursively defined type,
+            # we can go ahead and (re)set the actual layout now
+            stype.layout = get_layout_from_structDIE(sdie)
+        return stype
 
-        stype = _struct_db.map_struct_type(tuid, new_stype)
-    return stype
-
-def unionDIE_to_varlib(udie:DIE, parent=None):
-    utype = UnionType([], udie.name, parent)
+def unionDIE_to_varlib(udie:DIE):
+    utype = UnionType([], udie.name)
     utype.fields = [StructField(to_varlib_dtype(x), x.name) for x in udie.iter_children() if x.tag == 'DW_TAG_member']
     return utype
 
@@ -258,19 +204,19 @@ _qualifier_tags = [
     'DW_TAG_restrict_type',
 ]
 
-def to_varlib_dtype(self:DIE, parent:DataType=None):
+def to_varlib_dtype(self:DIE):
     if self.type_die is None:
         return BuiltinType.create_void_type()
 
     if self.type_die.tag == 'DW_TAG_typedef' or self.type_die.tag in _qualifier_tags:
         # resolve to canonical type
-        return to_varlib_dtype(self.type_die, parent=parent)
+        return to_varlib_dtype(self.type_die)
     elif self.type_die.tag == 'DW_TAG_structure_type':
         name = get_typename(self)
-        return structDIE_to_varlib(self.type_die, name, parent)
+        return structDIE_to_varlib(self.type_die, name)
     elif self.type_die.tag == 'DW_TAG_pointer_type':
-        ptype = PointerType(None, self.type_die.byte_size, parent)
-        ptype.pointed_to = to_varlib_dtype(self.type_die, parent=ptype)
+        ptype = PointerType(None, self.type_die.byte_size)
+        ptype.pointed_to = to_varlib_dtype(self.type_die)
         return ptype
     elif self.type_die.tag == 'DW_TAG_base_type':
         is_float, is_signed = getDwarfBaseTypeEncodingAttrs(self.type_die.encoding)
@@ -283,15 +229,15 @@ def to_varlib_dtype(self:DIE, parent:DataType=None):
             num_elems = subrange.count
         else:
             num_elems = None   # unknown size
-        arrtype = ArrayType(None, num_elems, parent)
-        arrtype.element_type = to_varlib_dtype(self.type_die, parent=arrtype)
+        arrtype = ArrayType(None, num_elems)
+        arrtype.element_type = to_varlib_dtype(self.type_die)
         return arrtype
     elif self.type_die.tag == 'DW_TAG_union_type':
-        return unionDIE_to_varlib(self.type_die, parent)
+        return unionDIE_to_varlib(self.type_die)
     elif self.type_die.tag == 'DW_TAG_subroutine_type':
-        fproto = FunctionPrototype(None, [], parent)
-        fproto.return_dtype = to_varlib_dtype(self.type_die, fproto) if self.type_die.type_die else BuiltinType.create_void_type()
-        fproto.params = [to_varlib_dtype(p, fproto) for p in self.type_die.iter_children() if p.tag == 'DW_TAG_formal_parameter']
+        fproto = FunctionPrototype(None, [])
+        fproto.return_dtype = to_varlib_dtype(self.type_die) if self.type_die.type_die else BuiltinType.create_void_type()
+        fproto.params = [to_varlib_dtype(p) for p in self.type_die.iter_children() if p.tag == 'DW_TAG_formal_parameter']
         return fproto
     elif self.type_die.tag == 'DW_TAG_enumeration_type':
         name = get_typename(self)
@@ -356,27 +302,6 @@ def find_struct_tag(self:DIE) -> DIE:
     type_die = self.get_DIE_from_attribute('DW_AT_type')
     return find_struct_tag(type_die)
 
-def get_struct_layout(self:DIE):
-    # we could have const or typedef or w/e, so find struct part first
-    # type_die:DIE
-    # type_die = self.get_DIE_from_attribute('DW_AT_type')
-    stag:DIE = find_struct_tag(self)
-    if not stag:
-        return None
-
-    members = []
-    # layout_str = f'STRUCT: {stag.name}'
-    for m in [x for x in stag.iter_children() if x.tag == 'DW_TAG_member']:
-        m:DIE
-        if 'DW_AT_data_member_location' in m.attributes:
-            offset = m.attributes['DW_AT_data_member_location'].value
-        else:
-            offset = 0
-        # layout_str += f'\n  [OFFSET 0x{offset:x}] {m.type} {m.name}'
-        members.append(StructMember(m.name, m.type, offset, m.size))
-    # return layout_str
-    return StructLayout(stag.name, members)
-
 # DIE.name = die_property('DW_AT_name', b'')
 DIE.name = property(lambda x: x.attributes['DW_AT_name'].value.decode() if 'DW_AT_name' in x.attributes else '')
 DIE.namebytes = die_property('DW_AT_name', b'')
@@ -390,7 +315,6 @@ DIE.high_pc = die_property('DW_AT_high_pc', None)
 DIE.type_die = property(get_type_die)
 DIE.type_name = property(get_die_typename)
 DIE.dtype_varlib = property(to_varlib_dtype)
-DIE.struct_layout = property(get_struct_layout)
 DIE.byte_size = die_property('DW_AT_byte_size', None)
 DIE.encoding = die_property('DW_AT_encoding', None)
 DIE.artificial = die_property('DW_AT_artificial', None)

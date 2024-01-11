@@ -1,30 +1,6 @@
 from typing import Dict
 
-from .datatype import DataType
-
-class StructField:
-    '''
-    Do we want to call these fields or members? would be good to be consistent...
-    '''
-    def __init__(self, dtype:DataType, name:str='') -> None:
-        self.dtype = dtype
-        self.name = name
-
-    @property
-    def size(self):
-        return self.dtype.size
-
-    def __str__(self):
-        return f'{self.dtype} {self.name}'
-
-    def __eq__(self, other):
-        if not isinstance(other, StructField):
-            return False
-        # NOTE: field name is not part of the comparison, just for readability
-        return self.dtype == other.dtype
-
-    def __hash__(self):
-        return hash((self.dtype,))
+from .datatype import StructField
 
 # throwing this together quickly, but the intent is to provide a helper class that helps
 # import struct definitions from the AST, DWARF, etc. and manages some of the logic
