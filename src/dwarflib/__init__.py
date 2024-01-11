@@ -13,6 +13,7 @@ from typing import Generator, Iterator, Set, List, Any, Dict
 
 from varlib.datatype import *
 from varlib.location import *
+from varlib import StructDatabase
 
 from .systemv import *
 
@@ -128,19 +129,96 @@ def get_die_typename(self:DIE):
     raise Exception(f'TODO: {type_die.tag}')
     # return f'TODO: {type_die.tag}'
 
+# current struct importer (set via DwarfStructImporter class)
+# holds the struct mapping state during import from DWARF to varlib
+# to allow us to reuse already-defined struct definitions, etc
+_struct_db:StructDatabase = None
+
+class UseStructDatabase:
+    def __init__(self, db:StructDatabase):
+        self.db = db
+
+    def __enter__(self):
+        global _struct_db
+        _struct_db = self.db
+        return self
+
+    def __exit__(self, exception_type, exception_value, exception_traceback):
+        global _struct_db
+        _struct_db = None     # reset
+
 def memberDIE_to_varlib(mdie:DIE, parent=None):
     KEY = 'DW_AT_data_member_location'
     offset = mdie.attributes[KEY].value if KEY in mdie.attributes else 0
     return (offset, StructField(dtype=to_varlib_dtype(mdie, parent), name=mdie.name))
 
 def structDIE_to_varlib(sdie:DIE, name:str, parent=None):
-    recursive = check_recursive_struct_ref(name, parent)
-    if recursive:
-        return recursive
+    global _struct_db
 
-    stype = StructType(fields_by_offset={}, name=name, parent=parent)
-    member_dies = [memberDIE_to_varlib(x, parent=stype) for x in sdie.iter_children() if x.tag == 'DW_TAG_member']
-    stype.fields_by_offset = {x[0]: x[1] for x in member_dies}
+    # recursive = check_recursive_struct_ref(name, parent)
+    # if recursive:
+    #     return recursive
+
+
+    # Wait, I think maybe the issue is this whole recursive check altogether. If we
+    # adjust the algorithm, I think we can avoid it completely as well as fix our current
+    # problem
+    # TODO: when you see a new structure type, MAP IT FIRST **before** defining
+    # the members
+    # --> that way, if a member eventually leads to a recursive definition
+    #     that refers to itself (via pointer), it is already mapped and you just
+    #     return a reference to it
+    # --> this also means we should be dealing with one definition of the struct,
+    #     not making multiple copies (otherwise, not everyone gets the full definition/right version!)
+    # --> STRUCTS ARE UNIQUE FOR (translation unit, name) TUPLES
+    #     (and can be shared across translation units...just have to check against contents)
+
+    is_fwd_decl = 'DW_AT_declaration' in sdie.attributes
+
+    # CLS: for now, don't look up or map forward-declarations - just return
+    # StructType objects with is_fwd_decl=True and default/invalid sid
+    # if is_fwd_decl:
+    #     stype = StructType(fields_by_offset={}, name=name, parent=parent)
+    #     stype.is_fwd_decl = is_fwd_decl
+    #     return stype
+
+    tuid = sdie.cu.get_top_DIE().name
+
+    sid = _struct_db.get_sid(tuid, name)
+    if sid == -1:
+        # unmapped type - need to define it
+
+        # TODO: define the new structure definition
+        # 1. create it
+        # 2. map it
+        # 3. define the fields (DO THIS LAST - THIS ALLOWS US TO HANDLE RECURSIVE DEFS)
+        pass
+    else:
+        # already exists!
+        # TODO: if sid we get back is EMPTY (forward decl) and this sdie is a real definition,
+        # then we need to update the existing sid with this definition!
+        # TODO - set a breakpoint here to verify this happens like I expect...
+        pass
+
+    stype = _struct_db.get_struct_type(tuid, name)
+    if not stype or (stype.size == 0 and not is_fwd_decl):
+        new_stype = StructType(fields_by_offset={}, name=name, parent=parent)
+        new_stype.is_fwd_decl = is_fwd_decl
+        member_dies = [memberDIE_to_varlib(x, parent=new_stype) for x in sdie.iter_children() if x.tag == 'DW_TAG_member']
+        new_stype.fields_by_offset = {x[0]: x[1] for x in member_dies}
+
+        if stype and stype.size == 0:   # fwd decl already existed
+            if new_stype.size > 0:
+                # original stype was a forward-decl and this is the actual definition
+                # -> let's update the definition
+                # NOTE: this won't update previously-defined forward-declared versions of this
+                # StructType!! But as long as our "database" ends up with the full definition
+                # we can use that as the defining type
+                _struct_db.update_struct_type(stype.sid, new_stype)
+            else:
+                return stype    # new_stype is just another fwd decl - don't remap it
+
+        stype = _struct_db.map_struct_type(tuid, new_stype)
     return stype
 
 def unionDIE_to_varlib(udie:DIE, parent=None):

@@ -206,90 +206,30 @@ class ArrayType(DataType):
     def __hash__(self):
         return hash((self.num_elements, self.element_type))
 
-class StructField:
-    '''
-    Do we want to call these fields or members? would be good to be consistent...
-    '''
-    def __init__(self, dtype:DataType, name:str='') -> None:
-        self.dtype = dtype
-        self.name = name
+# class RecursiveStructType(StructType):
+#     '''
+#     This is a little hacky, but purpose is to be able to:
+#         1. build the data type tree that can be followed as far as we care to
+#         2. detect and handle recursive data structures
+#     '''
+#     def __init__(self, prev_definition:StructType, parent:DataType) -> None:
+#         super().__init__(prev_definition.fields_by_offset,
+#                          prev_definition.name, parent)
+#         self.prev_definition = prev_definition
+#         self.is_recursive_def = True
 
-    @property
-    def size(self):
-        return self.dtype.size
+#     def __eq__(self, other):
+#         if not isinstance(other, StructType):
+#             return False
 
-    def __str__(self):
-        return f'{self.dtype} {self.name}'
+#         # can't use self.prev_definition == other since we are DEFINED recursively!
+#         # -> just check names match and call it good
+#         return self.name == other.name
 
-    def __eq__(self, other):
-        if not isinstance(other, StructField):
-            return False
-        # NOTE: field name is not part of the comparison, just for readability
-        return self.dtype == other.dtype
+#     def __hash__(self):
+#         return hash((len(self.prev_definition.fields_by_offset),))
 
-    def __hash__(self):
-        return hash((self.dtype,))
-
-class StructType(DataType):
-    '''
-    Structure types
-    '''
-    def __init__(self, fields_by_offset:Dict[int, StructField], name:str='', parent:DataType=None) -> None:
-        super().__init__(DataTypeCategories.Struct, parent)
-        self.fields_by_offset = fields_by_offset
-        self.name = name
-        self.is_recursive_def = False
-
-    @property
-    def size(self):
-        return sum(f.size for f in self.fields_by_offset.values())
-
-    @property
-    def type_sequence(self) -> str:
-        return 'STRUCT'
-
-    def __str__(self):
-        return self.name
-
-    def __eq__(self, other):
-        if not isinstance(other, StructType):
-            return False
-        if set(self.fields_by_offset.keys()) != set(other.fields_by_offset.keys()):
-            return False    # set of member offsets don't match
-        for off, field in self.fields_by_offset.items():
-            if field != other.fields_by_offset[off]:
-                return False
-        return True
-
-    def __hash__(self):
-        # have to sort keys to guarantee that hash is consistent
-        return hash(tuple([self.fields_by_offset[k] for k in sorted(self.fields_by_offset.keys())]))
-
-class RecursiveStructType(StructType):
-    '''
-    This is a little hacky, but purpose is to be able to:
-        1. build the data type tree that can be followed as far as we care to
-        2. detect and handle recursive data structures
-    '''
-    def __init__(self, prev_definition:StructType, parent:DataType) -> None:
-        super().__init__(prev_definition.fields_by_offset,
-                         prev_definition.name, parent)
-        self.prev_definition = prev_definition
-        self.is_recursive_def = True
-
-    def __eq__(self, other):
-        if not isinstance(other, RecursiveStructType):
-            return False
-        # this may change, but for now...
-        # I'm thinking we just verify we're comparing to another RecursiveStructType
-        # and call it good. We only should get in this case if this is nested inside
-        # a larger structure...later on we could use struct IDs to be 100% sure we're
-        # pointing at the right one but for now I won't worry about it
-        return True
-
-    def __hash__(self):
-        return hash((len(self.prev_definition.fields_by_offset),))
-
+# TODO: I think this goes away...
 def check_recursive_struct_ref(node_name:str, parent:DataType):
     '''
     Walks up the data type tree hierarchy checking if this is a recursive structure
@@ -300,7 +240,10 @@ def check_recursive_struct_ref(node_name:str, parent:DataType):
     pnode = parent
     while pnode is not None:
         if pnode.category == DataTypeCategories.Struct and pnode.name == node_name:
-            return RecursiveStructType(pnode, parent)
+            recursive_stype = StructType(fields_by_offset={}, name=node_name, parent=parent)
+            recursive_stype.is_fwd_decl = True  # treat recursively-defined types like fwd decls
+            return recursive_stype
+            # return RecursiveStructType(pnode, parent)
         pnode = pnode.parent
     return None     # no recursion found
 
@@ -384,9 +327,11 @@ class EnumType(DataType):
         if not isinstance(other, EnumType):
             return False
 
-        # TODO: don't return true until we have defined enum values and can
-        # actually compare
-        return False
+        # SIMPLE NAME COMPARISON for equality since I don't think we
+        # will care about recovering enum "sets"/definitions per se
+        # (it's likely we "mask" enums out as ints or something...)
+        # -> if we need to differentiate, then come back and FIXME
+        return self.name == other.name
 
     def __hash__(self):
         return hash((self.name, self.dt_size))
