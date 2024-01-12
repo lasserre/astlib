@@ -5,7 +5,7 @@ from typing import Dict, List, Any, Tuple, Callable
 from .astvisitor import *
 from .astviewer import ASTViewer, NodeAttrs
 
-from varlib import datatype, location
+from varlib import datatype, location, StructDatabase, StructType, StructLayout
 
 _ast_class_by_name = {}
 
@@ -15,6 +15,28 @@ _space_mapping = {
     'join': location.LocationType.Join,
     'unique': location.LocationType.Unique,
 }
+
+# current struct database (set via UseStructDatabase class)
+# holds the current struct database during import from DWARF to varlib
+_struct_db:StructDatabase = None
+
+class UseStructDatabase:
+    '''
+    Convenience 'with' statement wrapper to set/clear the astlib _struct_db
+    global when we are converting AST types to varlib types and storing
+    structures within this da
+    '''
+    def __init__(self, db:StructDatabase):
+        self.db = db
+
+    def __enter__(self):
+        global _struct_db
+        _struct_db = self.db
+        return self
+
+    def __exit__(self, exception_type, exception_value, exception_traceback):
+        global _struct_db
+        _struct_db = None     # reset
 
 def to_varlib_location(node:ASTNode) -> location.Location:
     if not hasattr(node, 'loc_space'):
@@ -30,6 +52,28 @@ def to_varlib_location(node:ASTNode) -> location.Location:
     loc_off = node.loc_off if loc_type != location.LocationType.Register else 0
     return location.Location(loc_type, node.loc_reg, loc_off)
 
+def structtype_to_varlib(node:ASTNode):
+    if node.is_union:
+        utype = datatype.UnionType([], node.name)
+        utype.fields = [datatype.StructField(to_varlib_dtype(f.dtype), f.name) for f in node.fields]
+        return utype
+
+    # default struct case
+    global _struct_db
+    tuid = node.tuid
+    sid = _struct_db.get_sid(tuid, node.name)
+
+    if sid == -1:
+        # unmapped type - need to define it
+        sid = _struct_db.map_struct_type_empty(tuid, node.name)    # 1. map a new structure with this name (creates sid)
+        stype = StructType(_struct_db, sid)                         # 2. NOW define fields (after mapping to prevent recursion issues)
+        stype.layout = StructLayout({off: datatype.StructField(to_varlib_dtype(f.dtype), f.name)
+                                for off, f in node.fields_by_offset.items()})
+        return stype
+    else:
+        stype = StructType(_struct_db, sid)     # get existing type from sid
+        return stype
+
 def to_varlib_dtype(node:ASTNode) -> datatype.DataType:
     '''
     Converts the AST Type node to its corresponding varlib data type, or
@@ -42,18 +86,7 @@ def to_varlib_dtype(node:ASTNode) -> datatype.DataType:
         ptype.pointed_to = to_varlib_dtype(node.inner[0])
         return ptype
     elif node.kind == 'StructType':
-        if node.is_union:
-            utype = datatype.UnionType([], node.name)
-            utype.fields = [datatype.StructField(to_varlib_dtype(f.dtype), f.name) for f in node.fields]
-            return utype
-        else:
-            # --------------------------------------------
-            # TODO: re-implement the StructType part like dwarflib did using StructDatabase
-            # --------------------------------------------
-            stype = datatype.StructType({}, node.name)
-            dt_fields = {off: datatype.StructField(to_varlib_dtype(f.dtype), f.name) for off, f in node.fields_by_offset.items()}
-            stype.fields_by_offset = dt_fields
-            return stype
+        return structtype_to_varlib(node)
     elif node.kind == 'ConstantArrayType':
         atype = datatype.ArrayType(None, num_elements=node.num_elements)
         atype.element_type = to_varlib_dtype(node.inner[0])
@@ -63,7 +96,8 @@ def to_varlib_dtype(node:ASTNode) -> datatype.DataType:
     elif node.kind == 'EnumType':
         return datatype.EnumType(node.name)
     elif node.kind == 'FunctionType':
-        fptype = datatype.FunctionPrototype(None, [])
+        # NOTE: node.name is not what I want ideally (rather have the typedef name)...but at least it's consistent
+        fptype = datatype.FunctionPrototype(None, [], node.name)
         fptype.return_dtype = to_varlib_dtype(node.return_dtype)
         fptype.params = [to_varlib_dtype(p) for p in node.inner]
         return fptype
@@ -90,7 +124,7 @@ _statement_node_kinds = [
     'WhileStmt'
 ]
 
-def _new_astnode_class_from_dict(d:Dict):
+def _new_astnode_class_from_dict(d:Dict, tuid:str):#=''):
     '''
     Creates a new class derived from ASTNode with a classname matching
     the 'kind' field in the dictionary (e.g. VarDecl, FunctionDecl, etc.)
@@ -102,23 +136,23 @@ def _new_astnode_class_from_dict(d:Dict):
         if self.kind == 'ConstantArrayType':
             self.__class__.size = property(lambda self: self.inner[0].size * self.num_elements)
         if self.kind == 'CStyleCastExpr':
-            self.dtype = _new_astnode_class_from_dict(self.dtype)(self.dtype)
+            self.dtype = _new_astnode_class_from_dict(self.dtype, tuid)(self.dtype, tuid)
             self.dtype.parent = self
             self.dtype.is_parent_attached = True
         elif self.kind == 'FieldDecl':
-            self.dtype = _new_astnode_class_from_dict(self.dtype)(self.dtype)
+            self.dtype = _new_astnode_class_from_dict(self.dtype, tuid)(self.dtype, tuid)
             self.dtype.parent = self
             self.dtype.is_parent_attached = True
         elif self.kind == 'FunctionDecl':
-            self.return_dtype = _new_astnode_class_from_dict(self.return_dtype)(self.return_dtype)
+            self.return_dtype = _new_astnode_class_from_dict(self.return_dtype, tuid)(self.return_dtype, tuid)
             self.return_dtype.parent = self
             self.return_dtype.is_parent_attached = True
         elif self.kind == 'FunctionType':
-            self.return_dtype = _new_astnode_class_from_dict(self.return_dtype)(self.return_dtype)
+            self.return_dtype = _new_astnode_class_from_dict(self.return_dtype, tuid)(self.return_dtype, tuid)
             self.return_dtype.parent = self
             self.return_dtype.is_parent_attached = True
         elif self.kind == 'VarDecl' or self.kind == 'ParmVarDecl':
-            self.dtype = _new_astnode_class_from_dict(self.dtype)(self.dtype)
+            self.dtype = _new_astnode_class_from_dict(self.dtype, tuid)(self.dtype, tuid)
             self.dtype.parent = self
             self.dtype.is_parent_attached = True
         elif self.kind == 'RecordDecl':
@@ -140,16 +174,18 @@ def _new_astnode_class_from_dict(d:Dict):
             self.__class__.size = property(lambda self: self.decl.inner[0].size)
 
     class NewClass(ASTNode):
-        def __init__(self, data:Dict):
+        def __init__(self, data:Dict, tuid:str):#=''):
             self.__dict__.update(data)
             if 'inner' in self.__dict__:
                 # self.__dict__['inner'] = [_new_astnode_class_from_dict(child)(child) for child in self.__dict__['inner']]
-                self.inner = [_new_astnode_class_from_dict(x)(x) for x in self.inner]
+                self.inner = [_new_astnode_class_from_dict(x, tuid)(x, tuid) for x in self.inner]
                 for child in self.inner:
                     child.parent = self
                     child.is_parent_attached = False
             else:
                 self.inner = []
+
+            self.tuid = tuid
 
             _handle_attached_types(self)
 
@@ -239,40 +275,51 @@ class UnionDef:
     def is_union(self):
         return True
 
-def create_struct_def(sdict:dict, sid:int):
+def create_struct_def(sdict:dict, sid:int, tuid:str=''):
     fields_by_offset = {}
     if sdict['fields']:
         for offset, fdict in sdict['fields'].items():
             dtype_dict = fdict['dtype']
-            dtype = _new_astnode_class_from_dict(dtype_dict)(dtype_dict)
+            dtype = _new_astnode_class_from_dict(dtype_dict, tuid)(dtype_dict, tuid)
             fields_by_offset[int(offset)] = FieldDef(fdict['name'], offset, dtype)
     return StructDef(sdict['name'], int(sid), fields_by_offset)
 
-def create_union_def(sdict:dict, sid:int):
+def create_union_def(sdict:dict, sid:int, tuid:str=''):
     fields = []
     if sdict['fields']:
         for fdict in sdict['fields']:
             dtype_dict = fdict['dtype']
-            dtype = _new_astnode_class_from_dict(dtype_dict)(dtype_dict)
+            dtype = _new_astnode_class_from_dict(dtype_dict, tuid)(dtype_dict, tuid)
             fields.append(FieldDef(fdict['name'], 0, dtype))
     return UnionDef(sdict['name'], sid, fields)
 
-def convert_structures_by_id(structs_by_id:Dict) -> Dict[int, StructDef]:
+def convert_structures_by_id(structs_by_id:Dict, tuid:str='') -> Dict[int, StructDef]:
     structs = {}
     for sid, sdict in structs_by_id.items():
-        structs[int(sid)] = create_union_def(sdict, sid) if sdict['is_union'] else \
-                            create_struct_def(sdict, sid)
+        structs[int(sid)] = create_union_def(sdict, sid, tuid) if sdict['is_union'] else \
+                            create_struct_def(sdict, sid, tuid)
     return structs
 
-def dict_to_ast(d:dict) -> Tuple[ASTNode, Dict[int, StructDef]]:
+def dict_to_ast(d:dict, tuid:str='') -> Tuple[ASTNode, Dict[int, StructDef]]:
+    '''
+    Convert the dictionary read in from JSON back to an AST object, returning the
+    top-level TranslationUnit node and struct_lib dictionary
+
+    d: Dictionary read from JSON to be converted
+    tuid: An identifying string for this translation unit (used by varlib to differentiate
+          and map structs from different translation units sharing the same name which
+          may or may not share the same definition)
+    '''
     if d['kind'] != 'TranslationUnitDecl':
         raise Exception(f'Expected dict to be a translation unit, found "{d["kind"]}" instead')
-    ast = _new_astnode_class_from_dict(d)(d)
-    struct_lib = convert_structures_by_id(d['structures_by_id'])
+
+    ast = _new_astnode_class_from_dict(d, tuid)(d, tuid)
+    struct_lib = convert_structures_by_id(d['structures_by_id'], tuid)
     StructTypeAndValueDeclLookup(struct_lib).extract(ast, save_result=True)
+
     return (ast, struct_lib)
 
 def json_to_ast(json_file:Path):
     with open(json_file) as f:
         data = json.load(f)
-    return dict_to_ast(data)
+    return dict_to_ast(data, json_file.stem)
