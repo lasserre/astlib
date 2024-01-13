@@ -1,6 +1,25 @@
+import json
+from pathlib import Path
 from typing import List, Dict, Iterable, Callable
 
 from .structlayout import *
+
+# NOTE: we avoid recursion by MAPPING a new structure type in the database
+# even before we finish defining its fields
+
+# UPDATED DESIGN
+# 1. when you map an sid, it is permanent
+#   - thus, if you map a new struct that matches an existing one,
+#     we will return you the existing sid so you always line up
+#   - thus, no remapping should be required
+# 2. fwd decls match the first struct with same name
+#   - this should work fine with #1
+# 3. to compare if 2 structs are the same
+#   a) set of offsets are the same
+#   b) first level type names are the same, where the type
+#      names are as they would be in source code, but we
+#      DO NOT BUILD A FULL DEFINITION FOR THIS
+#       - e.g. int, float*, MyStruct, eType, int[5], FuncProto*
 
 class StructDatabase:
     '''
@@ -9,37 +28,46 @@ class StructDatabase:
     def __init__(self) -> None:
         self.structs_by_id:Dict[int, StructDefinition] = {}     # maps sid: StructType
         self.sids_by_name:Dict[str, List[int]] = {}             # maps name: list of sids with this name
-        # self.sid_by_tu_and_name:Dict[str, Dict[str,int]] = {}   # maps (transl unit id (tuid), struct name): sid
         self.sid_by_tu_and_name:Dict[str, int] = {}             # maps 'tuid:name': sid
         self._next_sid = 0
 
-    # def get_struct_type(self, tuid:str, sname:str) -> StructType:
+    def to_dict(self) -> Dict[int, dict]:
+        '''
+        Converts the database into a dictionary-based format ready for JSON serialization
+        '''
+        # we only need to save off structs_by_id
+        # - rebuild sids_by_name as we read it in (don't save here)
+        # - sid_by_tu_and_name is only for initial construction, at this point we are done
+        #   and you only look up structs via sid
+        return {sid: sdef.to_dict() for sid, sdef in self.structs_by_id.items()}
 
-    # NOTE: this is really where we avoid recursion and can MAP a new
-    # structure type in the database even before we finish defining
-    # its fields
-    # (important to realize get_sid() is how this works...map_struct_type()
-    #  is intended for when we do NOT have a struct mapped yet inside this
-    #  translation unit - ensuring we don't already have it mapped elsewhere.
-    #  But that situation won't be an issue when we are simply defining a
-    #  recursive struct within a TU)
+    @staticmethod
+    def from_dict(d:Dict[int,dict]) -> 'StructDatabase':
+        sdb = StructDatabase()
+        sdb.structs_by_id = {int(sid): StructDefinition.from_dict(sd_dict, sdb) for sid, sd_dict in d.items()}
 
+        print(f'CLS: I think sids will be strings here...confirm, then convert to int first', flush=True)
+        # rebuild sids_by_name
+        for sid, sdef in sdb.structs_by_id.items():
+            if sdef.name not in sdb.sids_by_name:
+                sdb.sids_by_name[sdef.name] = [sid]
+            else:
+                sdb.sids_by_name[sdef.name].append(sid)
 
-    # UPDATED DESIGN
-    # 1. when you map an sid, it is permanent
-    #   - thus, if you map a new struct that matches an existing one,
-    #     we will return you the existing sid so you always line up
-    #   - thus, no remapping should be required
-    # 2. fwd decls match the first struct with same name
-    #   - this should work fine with #1
-    # 3. to compare if 2 structs are the same
-    #   a) set of offsets are the same
-    #   b) first level type names are the same, where the type
-    #      names are as they would be in source code, but we
-    #      DO NOT BUILD A FULL DEFINITION FOR THIS
-    #       - e.g. int, float*, MyStruct, eType, int[5], FuncProto*
+        # idk that we need it, but reset this so if we add a new struct its ready to go
+        sdb._next_sid = max(sdb.structs_by_id.keys()) + 1
+        return sdb
 
-    # def _first_level_layouts_match(self, fll1:Dict[int,str], fll2)
+    def to_json(self, filepath:Path):
+        with open(filepath, 'w') as f:
+            json.dump(self.to_dict(), f, indent=2)
+
+    @staticmethod
+    def from_json(filepath:Path) -> 'StructDatabase':
+        with open(filepath, 'r') as f:
+            data = json.load(f)
+        return StructDatabase.from_dict(data)
+
     def _get_struct_key(self, tuid:str, sname:str) -> str:
         return f'{tuid}:{sname}'
 
@@ -113,69 +141,3 @@ class StructDatabase:
             self.sids_by_name[sdef.name].append(new_sid)
 
         return new_sid
-
-    # def remap_structure_ids(self, walk_types:Iterable):
-    #     sid_remap = self._remap_db_structure_ids()
-
-    #     # remap each of the provided data types to match the new database ids
-    #     for dt in walk_types:
-    #         dt._remap_sids(sid_remap)
-
-    # def _remap_db_structure_ids(self) -> Dict[int, int]:
-    #     '''
-    #     Remaps the structure ids in this database, and returns the sid_remap which
-    #     maps old_sid: new_sid for all the original sids in the database.
-
-    #     FOR THIS TO WORK PROPERLY, THE CLIENT MUST IMMEDIATELY VISIT ALL
-    #     DataType objects created via this database and call dt._remap_sids() with
-    #     the sid_remap returned by this function.
-
-    #     Once that is complete, the database and all of the DataType objects referencing
-    #     structs within it should be essentially rebased to a disjoint set of ids
-    #     as well as consolidated such that one ID corresponds to one struct with
-    #     the same name and layout (instead of one ID for name/translation unit)
-    #     '''
-    #     # guarantee disjoint id set (start above self._next_sid somewhere)
-    #     # guarantee each sid that currently exists is in the remap
-    #     remap_base_id = self._next_sid + 1000
-    #     remap_base_id -= (remap_base_id % 100)
-    #     next_new_id = remap_base_id
-
-    #     new_structs_by_id = {}
-    #     sid_remap = {}
-
-    #     # split into unique sets based on actual layout/name
-    #     for sname, old_sids in self.sids_by_name.items():
-    #         # partition based on definition (dict keys will collect same definitions together)
-    #         d:Dict[StructDefinition, List[int]] = {}  # maps sdef: list of old ids
-
-    #         for x in old_sids:
-    #             sdef = self.structs_by_id[x]
-    #             if sdef not in d:
-    #                 d[sdef] = [x]
-    #             else:
-    #                 d[sdef].append(x)
-
-    #         for sdef in d.keys():
-    #             new_structs_by_id[next_new_id] = sdef
-    #             for x in d[sdef]:
-    #                 sid_remap[x] = next_new_id
-    #             next_new_id += 1
-
-    #     # overwrite with new version of structs_by_id
-    #     self.structs_by_id = new_structs_by_id
-
-    #     # for consistency:
-    #     # remap sids_by_name
-    #     new_sids_by_name = {}
-    #     for sname, old_sids in self.sids_by_name.items():
-    #         new_ids = list(set([sid_remap[x] for x in old_sids]))
-    #         new_sids_by_name[sname] = new_ids
-    #     self.sids_by_name = new_sids_by_name
-
-    #     # remap self.sid_by_tu_and_name?
-    #     # CLS: I don't think we ever need this again...if so, I can
-    #     # change this to actually remap it instead of zero it out :)
-    #     self.sid_by_tu_and_name = {}
-
-    #     return sid_remap

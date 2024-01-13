@@ -24,17 +24,6 @@ class StructType(DataType):
         self.sid = sid
         self._db = db
 
-        # TODO: I think this can go away? or at best become a property...
-        # self.is_fwd_decl = False
-
-    def _remap_sids(self, sid_remap:Dict[int,int]):
-        # only remap this struct 1x if needed
-        if self.sid in sid_remap:
-            # this breaks our old connection - now we point to new sid
-            self.sid = sid_remap[self.sid]
-            for f in self.fields_by_offset.values():
-                f.dtype._remap_sids(sid_remap)
-
     @property
     def empty(self) -> bool:
         '''
@@ -95,3 +84,16 @@ class StructType(DataType):
 
     def __hash__(self):
         return hash(self.name)      # you know, these are generally unique! lol
+
+    def to_dict(self) -> dict:
+        return {
+            **self._get_base_dict(),
+            'sid': self.sid
+        }
+
+    @staticmethod
+    def from_dict(d:dict, sdb:StructDatabase) -> 'StructType':
+        return StructType(sdb, d['sid'])
+
+from .datatype import _dt_from_dict_methods
+_dt_from_dict_methods['StructType'] = StructType.from_dict

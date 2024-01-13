@@ -26,19 +26,6 @@ class DataType:
     def __init__(self, category:str) -> None:
         self.category = category
 
-    def _remap_sids(self, sid_remap:Dict[int,int]):
-        '''
-        Remap any StructTypes contained within this type, or do nothing if not applicable
-
-        sid_remap: Mapping of old_sid: new_sid for each sid in the database (identity maps
-                   will be used if no actual change is desired)
-
-        Guarantees:
-        - new ids are outside the range of old ids, so any observed old ids (sid_remap.keys())
-          will not collide with any new ids (sid_remap.values())
-        '''
-        raise NotImplementedError(f'_remap_sids not implemented in {self.__class__}')
-
     @property
     def typename_basic(self) -> str:
         '''
@@ -65,6 +52,15 @@ class DataType:
     def type_sequence(self) -> str:
         '''Returns the data type sequence as a CSV string'''
         raise NotImplementedError(f'type_sequence property not implemented in {self.__class__}')
+
+    def to_dict(self) -> dict:
+        '''Converts the data type into a serializable dict'''
+        raise NotImplementedError(f'to_dict not implemented in {self.__class__.__name__}')
+
+    def _get_base_dict(self) -> dict:
+        return {
+            'kind': str(self.__class__.__name__)
+        }
 
 _standard_floats = {
     4: 'float',
@@ -103,9 +99,6 @@ class BuiltinType(DataType):
         self.floating_point = floating_point
         self.signed = signed
         self._size = size
-
-    def _remap_sids(self, sid_remap:Dict[int,int]):
-        return  # N/A
 
     @property
     def standard_name(self) -> str:
@@ -163,6 +156,19 @@ class BuiltinType(DataType):
     def type_sequence(self) -> str:
         return self.standard_name
 
+    def to_dict(self) -> dict:
+        return {
+            **self._get_base_dict(),
+            'name': self.name,
+            'fp': self.floating_point,
+            'sign': self.signed,
+            'size': self.size
+        }
+
+    @staticmethod
+    def from_dict(d:dict, sdb) -> 'BuiltinType':
+        return BuiltinType(name=d['name'], floating_point=d['fp'], signed=d['sign'], size=d['size'])
+
 class PointerType(DataType):
     '''
     Pointer types
@@ -171,9 +177,6 @@ class PointerType(DataType):
         super().__init__(DataTypeCategories.Pointer)
         self.pointed_to = pointed_to
         self.pointer_size = pointer_size
-
-    def _remap_sids(self, sid_remap:Dict[int,int]):
-        self.pointed_to._remap_sids(sid_remap)
 
     @property
     def inner(self):
@@ -207,6 +210,17 @@ class PointerType(DataType):
     def __hash__(self):
         return hash((self.pointed_to,))
 
+    def to_dict(self) -> dict:
+        return {
+            **self._get_base_dict(),
+            'ptr_sz': self.pointer_size,
+            'ptd_to': self.pointed_to.to_dict(),
+        }
+
+    @staticmethod
+    def from_dict(d:dict, sdb) -> 'PointerType':
+        return PointerType(datatype_from_dict(d['ptd_to'], sdb), d['ptr_sz'])
+
 class ArrayType(DataType):
     '''
     Array types
@@ -215,9 +229,6 @@ class ArrayType(DataType):
         super().__init__(DataTypeCategories.Array)
         self.element_type = element_type
         self.num_elements = num_elements
-
-    def _remap_sids(self, sid_remap:Dict[int,int]):
-        self.element_type._remap_sids(sid_remap)
 
     @property
     def inner(self):
@@ -250,6 +261,17 @@ class ArrayType(DataType):
     def __hash__(self):
         return hash((self.num_elements, self.element_type))
 
+    def to_dict(self) -> dict:
+        return {
+            **self._get_base_dict(),
+            'nelem': self.num_elements,
+            'dtype': self.element_type.to_dict()
+        }
+
+    @staticmethod
+    def from_dict(d:dict, sdb) -> 'ArrayType':
+        return ArrayType(datatype_from_dict(d['dtype'], sdb), d['nelem'])
+
 # NOTE: I think unions should be treated as their own type...
 # since we care so much about offsets in structure recovery,
 # unions are handled quite differently since everything is at
@@ -279,6 +301,16 @@ class StructField:
     def __hash__(self):
         return hash((self.dtype,))
 
+    def to_dict(self) -> dict:
+        return {
+            'name': self.name,
+            'dtype': self.dtype.to_dict()
+        }
+
+    @staticmethod
+    def from_dict(d:dict, sdb) -> 'StructField':
+        return StructField(datatype_from_dict(d['dtype'], sdb), d['name'])
+
 class UnionTypeBasic(DataType):
     '''
     Fake UnionType whose only purpose is to participate in typename_basic
@@ -299,10 +331,6 @@ class UnionType(DataType):
         super().__init__(DataTypeCategories.Union)
         self.fields = fields
         self.name = name
-
-    def _remap_sids(self, sid_remap:Dict[int,int]):
-        for f in self.fields:
-            f.dtype._remap_sids(sid_remap)
 
     @property
     def size(self):
@@ -359,15 +387,25 @@ class UnionType(DataType):
         dtchain.pop()   # remove self.name
         return is_equal
 
+    def to_dict(self) -> dict:
+        return {
+            **self._get_base_dict(),
+            'name': self.name,
+            'fields': [f.to_dict() for f in self.fields]
+        }
+
+    @staticmethod
+    def from_dict(d:dict, sdb) -> 'UnionType':
+        return UnionType(
+            [StructField.from_dict(fdict, sdb) for fdict in d['fields']],
+            name=d['name']
+        )
 
 class EnumType(DataType):
     def __init__(self, name:str, dt_size:int=4) -> None:
         super().__init__(DataTypeCategories.Enum)
         self.name = name
         self.dt_size = dt_size  # don't know if we need this, assume 4B int for now
-
-    def _remap_sids(self, sid_remap:Dict[int,int]):
-        return  # N/A
 
     @property
     def size(self):
@@ -400,6 +438,17 @@ class EnumType(DataType):
     # TODO - if we really care about enums, need to extend this to
     # define the enumerated values (EnumConstantDecl from AST)
 
+    def to_dict(self) -> dict:
+        return {
+            **self._get_base_dict(),
+            'name': self.name,
+            'size': self.dt_size,
+        }
+
+    @staticmethod
+    def from_dict(d:dict, sdb) -> 'EnumType':
+        return EnumType(d['name'], d['size'])
+
 class FunctionPrototype(DataType):
     '''
     This may serve double duty - we can represent a function prototype for things
@@ -411,11 +460,6 @@ class FunctionPrototype(DataType):
         self.return_dtype = return_dtype
         self.params = params
         self.name = name
-
-    def _remap_sids(self, sid_remap:Dict[int,int]):
-        self.return_dtype._remap_sids(sid_remap)
-        for p in self.params:
-            p._remap_sids(sid_remap)
 
     @property
     def size(self):
@@ -465,3 +509,32 @@ class FunctionPrototype(DataType):
 
     def __hash__(self):
         return hash((self.name, self.return_dtype, *self.params))
+
+    def to_dict(self) -> dict:
+        return {
+            **self._get_base_dict(),
+            'name': self.name,
+            'rdtype': self.return_dtype.to_dict(),
+            'params': [p.to_dict() for p in self.params],
+        }
+
+    @staticmethod
+    def from_dict(d:dict, sdb) -> 'FunctionPrototype':
+        return FunctionPrototype(datatype_from_dict(d['rdtype'], sdb),
+                [datatype_from_dict(pdict, sdb) for pdict in d['params']],
+                d['name']
+            )
+
+_dt_from_dict_methods = {
+    'ArrayType': ArrayType.from_dict,
+    'BuiltinType': BuiltinType.from_dict,
+    'EnumType': EnumType.from_dict,
+    'FunctionPrototype': FunctionPrototype.from_dict,
+    'PointerType': PointerType.from_dict,
+    'UnionType': UnionType.from_dict,
+}
+
+def datatype_from_dict(d:dict, sdb) -> 'DataType':
+    if d['kind'] not in _dt_from_dict_methods:
+        raise NotImplementedError(f'DataType kind {d["kind"]} not mapped to a from_dict method')
+    return _dt_from_dict_methods[d['kind']](d, sdb)
