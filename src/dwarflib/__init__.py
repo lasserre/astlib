@@ -123,10 +123,12 @@ class UseStructDatabase:
         global _struct_db
         _struct_db = None     # reset
 
-def memberDIE_to_varlib(mdie:DIE):
+def offset_from_memberDIE(mdie:DIE) -> int:
     KEY = 'DW_AT_data_member_location'
-    offset = mdie.attributes[KEY].value if KEY in mdie.attributes else 0
-    return (offset, StructField(dtype=to_varlib_dtype(mdie), name=mdie.name))
+    return mdie.attributes[KEY].value if KEY in mdie.attributes else 0
+
+def memberDIE_to_varlib(mdie:DIE):
+    return (offset_from_memberDIE(mdie), StructField(dtype=to_varlib_dtype(mdie), name=mdie.name))
 
 def get_layout_from_structDIE(sdie:DIE) -> StructLayout:
     '''
@@ -135,6 +137,10 @@ def get_layout_from_structDIE(sdie:DIE) -> StructLayout:
     member_dies = [memberDIE_to_varlib(mdie) for mdie in sdie.iter_children() if mdie.tag == 'DW_TAG_member']
     return StructLayout({x[0]: x[1] for x in member_dies})
 
+def get_fllayout_for_struct(sdie:DIE) -> Dict[int, str]:
+    return {offset_from_memberDIE(mdie): to_varlib_dtype(mdie, typename_basic=True).typename_basic  \
+                     for mdie in sdie.iter_children() if mdie.tag == 'DW_TAG_member'}
+
 def structDIE_to_varlib(sdie:DIE, name:str):
     global _struct_db
 
@@ -142,7 +148,8 @@ def structDIE_to_varlib(sdie:DIE, name:str):
     # tuid = ''   # try without differentiating by TU
     tuid = sdie.cu.get_top_DIE().name
 
-    sid = _struct_db.get_sid(tuid, name)
+    sid = _struct_db.get_sid(tuid, name, is_fwd_decl,
+                lambda: get_fllayout_for_struct(sdie))
 
     if sid == -1:
         # unmapped type - need to define it
@@ -204,19 +211,19 @@ _qualifier_tags = [
     'DW_TAG_restrict_type',
 ]
 
-def to_varlib_dtype(self:DIE, typedef_name:str=''):
+def to_varlib_dtype(self:DIE, typedef_name:str='', typename_basic:bool=False):
     if self.type_die is None:
         return BuiltinType.create_void_type()
 
     if self.type_die.tag == 'DW_TAG_typedef' or self.type_die.tag in _qualifier_tags:
         # resolve to canonical type
-        return to_varlib_dtype(self.type_die, self.type_die.name)
+        return to_varlib_dtype(self.type_die, self.type_die.name, typename_basic)
     elif self.type_die.tag == 'DW_TAG_structure_type':
         name = get_typename(self)
-        return structDIE_to_varlib(self.type_die, name)
+        return StructTypeBasic(name) if typename_basic else structDIE_to_varlib(self.type_die, name)
     elif self.type_die.tag == 'DW_TAG_pointer_type':
         ptype = PointerType(None, self.type_die.byte_size)
-        ptype.pointed_to = to_varlib_dtype(self.type_die, typedef_name)
+        ptype.pointed_to = to_varlib_dtype(self.type_die, typedef_name, typename_basic)
         return ptype
     elif self.type_die.tag == 'DW_TAG_base_type':
         is_float, is_signed = getDwarfBaseTypeEncodingAttrs(self.type_die.encoding)
@@ -230,14 +237,16 @@ def to_varlib_dtype(self:DIE, typedef_name:str=''):
         else:
             num_elems = None   # unknown size
         arrtype = ArrayType(None, num_elems)
-        arrtype.element_type = to_varlib_dtype(self.type_die, typedef_name)
+        arrtype.element_type = to_varlib_dtype(self.type_die, typedef_name, typename_basic)
         return arrtype
     elif self.type_die.tag == 'DW_TAG_union_type':
-        return unionDIE_to_varlib(self.type_die)
+        return UnionTypeBasic(self.type_die.name) if typename_basic else unionDIE_to_varlib(self.type_die)
     elif self.type_die.tag == 'DW_TAG_subroutine_type':
         fproto = FunctionPrototype(None, [], typedef_name)
-        fproto.return_dtype = to_varlib_dtype(self.type_die) if self.type_die.type_die else BuiltinType.create_void_type()
-        fproto.params = [to_varlib_dtype(p) for p in self.type_die.iter_children() if p.tag == 'DW_TAG_formal_parameter']
+        if not typename_basic:
+            # only grab the signature if we're doing the full definition
+            fproto.return_dtype = to_varlib_dtype(self.type_die) if self.type_die.type_die else BuiltinType.create_void_type()
+            fproto.params = [to_varlib_dtype(p) for p in self.type_die.iter_children() if p.tag == 'DW_TAG_formal_parameter']
         return fproto
     elif self.type_die.tag == 'DW_TAG_enumeration_type':
         name = get_typename(self)

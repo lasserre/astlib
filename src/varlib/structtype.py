@@ -2,6 +2,18 @@ from .datatype import *
 from .structlayout import *
 from .structdatabase import *
 
+class StructTypeBasic(DataType):
+    '''
+    Fake StructType whose only role is to participate in typename_basic
+    '''
+    def __init__(self, name:str):
+        super().__init__(DataTypeCategories.Struct)
+        self.name = name
+
+    @property
+    def typename_basic(self) -> str:
+        return self.name
+
 class StructType(DataType):
     '''
     Structure types
@@ -60,6 +72,10 @@ class StructType(DataType):
     @property
     def type_sequence(self) -> str:
         return 'STRUCT'
+
+    @property
+    def typename_basic(self) -> str:
+        return self.name
 
     @property
     def _struct_def(self) -> StructDefinition:

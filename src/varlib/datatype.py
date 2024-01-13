@@ -40,6 +40,18 @@ class DataType:
         raise NotImplementedError(f'_remap_sids not implemented in {self.__class__}')
 
     @property
+    def typename_basic(self) -> str:
+        '''
+        Returns a basic name representing this data type. The key here, is that it
+        allows a representation of the type without full parsing of its definition
+        (like function prototypes, structure definitions, etc) to facilitate
+        struct matching across translation units
+
+        There's probably a better name for this...
+        '''
+        raise NotImplementedError(f'NAME not implemented in {self.__class__}')
+
+    @property
     def inner(self) -> List['DataType']:
         '''List of nested DataType components (mimics AST structure)'''
         raise NotImplementedError(f'inner property not implemented in {self.__class__}')
@@ -113,6 +125,10 @@ class BuiltinType(DataType):
         else:
             return _standard_unsigned_ints[self.size] if self.size in _standard_unsigned_ints else f'UNMAPPED_UINT_{self.size}'
 
+    @property
+    def typename_basic(self) -> str:
+        return self.standard_name
+
     def __str__(self):
         return self.standard_name
 
@@ -171,6 +187,10 @@ class PointerType(DataType):
     def type_sequence(self) -> str:
         return f'PTR,{self.pointed_to.type_sequence}'
 
+    @property
+    def typename_basic(self) -> str:
+        return f'{self.pointed_to.typename_basic}*'
+
     def __str__(self):
         if self.pointed_to.category == DataTypeCategories.Function:
             # delegate entire string representation to the function prototype
@@ -211,6 +231,11 @@ class ArrayType(DataType):
     def type_sequence(self) -> str:
         return f'ARR,{self.element_type.type_sequence}'
 
+    @property
+    def typename_basic(self) -> str:
+        len_str = self.num_elements if self.num_elements else ''
+        return f'{self.element_type.typename_basic}[{len_str}]'
+
     def __str__(self):
         len_str = self.num_elements if self.num_elements else ''
         return f'{self.element_type}[{len_str}]'
@@ -224,47 +249,6 @@ class ArrayType(DataType):
 
     def __hash__(self):
         return hash((self.num_elements, self.element_type))
-
-# class RecursiveStructType(StructType):
-#     '''
-#     This is a little hacky, but purpose is to be able to:
-#         1. build the data type tree that can be followed as far as we care to
-#         2. detect and handle recursive data structures
-#     '''
-#     def __init__(self, prev_definition:StructType, parent:DataType) -> None:
-#         super().__init__(prev_definition.fields_by_offset,
-#                          prev_definition.name, parent)
-#         self.prev_definition = prev_definition
-#         self.is_recursive_def = True
-
-#     def __eq__(self, other):
-#         if not isinstance(other, StructType):
-#             return False
-
-#         # can't use self.prev_definition == other since we are DEFINED recursively!
-#         # -> just check names match and call it good
-#         return self.name == other.name
-
-#     def __hash__(self):
-#         return hash((len(self.prev_definition.fields_by_offset),))
-
-# TODO: I think this goes away...
-# def check_recursive_struct_ref(node_name:str, parent:DataType):
-#     '''
-#     Walks up the data type tree hierarchy checking if this is a recursive structure
-#     definition. If so, returns a RecursiveStructType for the given node_name. If
-#     not, returns None (and the caller may continue creating a normal StructType
-#     node)
-#     '''
-#     pnode = parent
-#     while pnode is not None:
-#         if pnode.category == DataTypeCategories.Struct and pnode.name == node_name:
-#             recursive_stype = StructType(fields_by_offset={}, name=node_name, parent=parent)
-#             recursive_stype.is_fwd_decl = True  # treat recursively-defined types like fwd decls
-#             return recursive_stype
-#             # return RecursiveStructType(pnode, parent)
-#         pnode = pnode.parent
-#     return None     # no recursion found
 
 # NOTE: I think unions should be treated as their own type...
 # since we care so much about offsets in structure recovery,
@@ -295,6 +279,18 @@ class StructField:
     def __hash__(self):
         return hash((self.dtype,))
 
+class UnionTypeBasic(DataType):
+    '''
+    Fake UnionType whose only purpose is to participate in typename_basic
+    '''
+    def __init__(self, name:str):
+        super().__init__(DataTypeCategories.Union)
+        self.name = name
+
+    @property
+    def typename_basic(self) -> str:
+        return self.name
+
 class UnionType(DataType):
     '''
     Union types
@@ -315,6 +311,10 @@ class UnionType(DataType):
     @property
     def type_sequence(self) -> str:
         return 'UNION'
+
+    @property
+    def typename_basic(self) -> str:
+        return self.name
 
     def __str__(self):
         return self.name
@@ -377,6 +377,10 @@ class EnumType(DataType):
     def type_sequence(self) -> str:
         return 'ENUM'
 
+    @property
+    def typename_basic(self) -> str:
+        return self.name
+
     def __str__(self):
         return self.name
 
@@ -420,6 +424,10 @@ class FunctionPrototype(DataType):
     @property
     def type_sequence(self) -> str:
         return 'FUNC'
+
+    @property
+    def typename_basic(self) -> str:
+        return self.name if self.name else 'FuncProto'
 
     def __str__(self):
         # assumes function pointer

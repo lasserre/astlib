@@ -42,6 +42,13 @@ class StructLayout:
         #   for structs that have pointers to themselves
         return hash(tuple([self.fields_by_offset[k].name for k in sorted(self.fields_by_offset.keys())]))
 
+    def get_first_level_layout(self) -> Dict[int,str]:
+        '''
+        Returns a mapping of {offset: type name} for the top-level members of this
+        structure (for quicker equality comparisons across translation units)
+        '''
+        return {off: f.dtype.typename_basic for off, f in self.fields_by_offset.items()}
+
 class StructDefinition:
     '''
     Defines the name and content of a structure, and is logically the "database format" of a structure

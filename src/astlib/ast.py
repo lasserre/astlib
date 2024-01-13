@@ -5,7 +5,8 @@ from typing import Dict, List, Any, Tuple, Callable
 from .astvisitor import *
 from .astviewer import ASTViewer, NodeAttrs
 
-from varlib import datatype, location, StructDatabase, StructType, StructLayout
+from varlib import datatype, location, StructDatabase, StructType, StructLayout, StructTypeBasic
+from varlib.datatype import UnionType, UnionTypeBasic
 
 _ast_class_by_name = {}
 
@@ -52,6 +53,10 @@ def to_varlib_location(node:ASTNode) -> location.Location:
     loc_off = node.loc_off if loc_type != location.LocationType.Register else 0
     return location.Location(loc_type, node.loc_reg, loc_off)
 
+def get_fllayout_for_struct(node:ASTNode):
+    return {off: to_varlib_dtype(f.dtype, typename_basic=True).typename_basic
+                        for off, f in node.fields_by_offset.items()}
+
 def structtype_to_varlib(node:ASTNode):
     if node.is_union:
         utype = datatype.UnionType([], node.name)
@@ -61,7 +66,8 @@ def structtype_to_varlib(node:ASTNode):
     # default struct case
     global _struct_db
     tuid = node.tuid
-    sid = _struct_db.get_sid(tuid, node.name)
+    is_fwd_decl = False     # assuming no fwd decls in our AST structs?
+    sid = _struct_db.get_sid(tuid, node.name, is_fwd_decl, lambda: get_fllayout_for_struct(node))
 
     if sid == -1:
         # unmapped type - need to define it
@@ -74,7 +80,7 @@ def structtype_to_varlib(node:ASTNode):
         stype = StructType(_struct_db, sid)     # get existing type from sid
         return stype
 
-def to_varlib_dtype(node:ASTNode) -> datatype.DataType:
+def to_varlib_dtype(node:ASTNode, typename_basic:bool=False) -> datatype.DataType:
     '''
     Converts the AST Type node to its corresponding varlib data type, or
     returns None if the node is not a data type node.
@@ -83,13 +89,15 @@ def to_varlib_dtype(node:ASTNode) -> datatype.DataType:
         return datatype.BuiltinType(node.name, node.is_floating_point, node.is_signed, node.size)
     elif node.kind == 'PointerType':
         ptype = datatype.PointerType(None, node.size)
-        ptype.pointed_to = to_varlib_dtype(node.inner[0])
+        ptype.pointed_to = to_varlib_dtype(node.inner[0], typename_basic)
         return ptype
     elif node.kind == 'StructType':
+        if typename_basic:
+            return UnionTypeBasic(node.name) if node.is_union else StructTypeBasic(node.name)
         return structtype_to_varlib(node)
     elif node.kind == 'ConstantArrayType':
         atype = datatype.ArrayType(None, num_elements=node.num_elements)
-        atype.element_type = to_varlib_dtype(node.inner[0])
+        atype.element_type = to_varlib_dtype(node.inner[0], typename_basic)
         return atype
     elif node.kind == 'VoidType':
         return datatype.BuiltinType('void', False, False, 0)
@@ -98,12 +106,13 @@ def to_varlib_dtype(node:ASTNode) -> datatype.DataType:
     elif node.kind == 'FunctionType':
         # NOTE: node.name is not what I want ideally (rather have the typedef name)...but at least it's consistent
         fptype = datatype.FunctionPrototype(None, [], node.name)
-        fptype.return_dtype = to_varlib_dtype(node.return_dtype)
-        fptype.params = [to_varlib_dtype(p) for p in node.inner]
+        if not typename_basic:
+            fptype.return_dtype = to_varlib_dtype(node.return_dtype)
+            fptype.params = [to_varlib_dtype(p) for p in node.inner]
         return fptype
     elif node.kind == 'TypedefType':
         # convert to canonical type (remove typdefs)
-        return to_varlib_dtype(node.decl.inner[0])
+        return to_varlib_dtype(node.decl.inner[0], typename_basic)
     elif node.kind.endswith('Type'):
         raise Exception(f'Unhandled AST type node "{node.kind}"')
 
