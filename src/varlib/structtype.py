@@ -18,7 +18,7 @@ class StructType(DataType):
     '''
     Structure types
     '''
-    def __init__(self, db:StructDatabase, sid:int=-1) -> None:
+    def __init__(self, db:StructDatabase, sid:int=-1, is_class:bool=False) -> None:
         super().__init__(DataTypeCategories.Struct)
 
         self.sid = sid
@@ -41,6 +41,11 @@ class StructType(DataType):
     def layout(self) -> StructLayout:
         '''The member layout information for the structure'''
         return None if self.sid < 0 else self._db.structs_by_id[self.sid].layout
+
+    @property
+    def is_class(self) -> bool:
+        '''True if this is a class type (C++) and not a simple struct'''
+        return self._struct_def.is_class if self._struct_def else False
 
     @layout.setter
     def layout(self, value:StructLayout):

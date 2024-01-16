@@ -104,12 +104,12 @@ class StructDatabase:
 
         return -1   # unable to find a match anywhere
 
-    def map_struct_type_empty(self, tuid:str, name:str) -> int:
+    def map_struct_type_empty(self, tuid:str, name:str, is_class:bool=False) -> int:
         '''
         Same as map_struct_type, but creates an empty StructureDefinition with the
         given name and returns the assigned sid
         '''
-        return self.map_struct_type(tuid, StructDefinition(name, StructLayout()))
+        return self.map_struct_type(tuid, StructDefinition(name, StructLayout(), is_class))
 
     def map_struct_type(self, tuid:str, sdef:StructDefinition) -> int:
         '''

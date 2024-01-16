@@ -141,7 +141,7 @@ def get_fllayout_for_struct(sdie:DIE) -> Dict[int, str]:
     return {offset_from_memberDIE(mdie): to_varlib_dtype(mdie, typename_basic=True).typename_basic  \
                      for mdie in sdie.iter_children() if mdie.tag == 'DW_TAG_member'}
 
-def structDIE_to_varlib(sdie:DIE, name:str):
+def structDIE_to_varlib(sdie:DIE, name:str, is_class:bool=False):
     global _struct_db
 
     is_fwd_decl = 'DW_AT_declaration' in sdie.attributes
@@ -153,8 +153,8 @@ def structDIE_to_varlib(sdie:DIE, name:str):
 
     if sid == -1:
         # unmapped type - need to define it
-        sid = _struct_db.map_struct_type_empty(tuid, name)      # 1. map a new structure with this name (creates sid)
-        stype = StructType(_struct_db, sid)                     # 2. NOW define fields (after mapping to prevent recursion issues)
+        sid = _struct_db.map_struct_type_empty(tuid, name, is_class)    # 1. map a new structure with this name (creates sid)
+        stype = StructType(_struct_db, sid)                             # 2. NOW define fields (after mapping to prevent recursion issues)
         stype.layout = get_layout_from_structDIE(sdie)
         return stype
     else:
@@ -218,9 +218,12 @@ def to_varlib_dtype(self:DIE, typedef_name:str='', typename_basic:bool=False):
     if self.type_die.tag == 'DW_TAG_typedef' or self.type_die.tag in _qualifier_tags:
         # resolve to canonical type
         return to_varlib_dtype(self.type_die, self.type_die.name, typename_basic)
-    elif self.type_die.tag == 'DW_TAG_structure_type':
+    elif self.type_die.tag == 'DW_TAG_structure_type' or self.type_die.tag == 'DW_TAG_class_type':
         name = get_typename(self)
-        return StructTypeBasic(name) if typename_basic else structDIE_to_varlib(self.type_die, name)
+        # support gathering C++ class structure layouts
+        is_class=self.type_die.tag == 'DW_TAG_class_type'
+        stype = StructTypeBasic(name) if typename_basic else structDIE_to_varlib(self.type_die, name, is_class)
+        return stype
     elif self.type_die.tag == 'DW_TAG_pointer_type':
         ptype = PointerType(None, self.type_die.byte_size)
         ptype.pointed_to = to_varlib_dtype(self.type_die, typedef_name, typename_basic)
