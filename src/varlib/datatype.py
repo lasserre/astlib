@@ -71,19 +71,19 @@ _standard_floats = {
 
 # <stdint.h>-style integer names:
 _standard_unsigned_ints = {
-    1: 'uint8_t',
-    2: 'uint16_t',
-    4: 'uint32_t',
-    8: 'uint64_t',
-    16: '__uint128_t',
+    1: 'uchar',
+    2: 'ushort',
+    4: 'uint32',
+    8: 'uint64',
+    16: 'uint128',
 }
 
 _standard_signed_ints = {
-    1: 'int8_t',
-    2: 'int16_t',
-    4: 'int32_t',
-    8: 'int64_t',
-    16: '__int128_t',
+    1: 'char',
+    2: 'short',
+    4: 'int32',
+    8: 'int64',
+    16: 'int128',
 }
 
 class BuiltinType(DataType):
