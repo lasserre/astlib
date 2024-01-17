@@ -11,3 +11,6 @@ def ghidra_script_folder() -> Path:
 
 def decompile_all_script() -> Path:
     return ghidra_script_folder()/'ghidra_decompile_all.py'
+
+def set_analysis_options_script() -> Path:
+    return ghidra_script_folder()/'set_analysis_options.py'
