@@ -43,8 +43,8 @@ class Location:
                 return  self.loc_type == __value.loc_type and \
                         self.reg_name == __value.reg_name
             else:
-                # ignore reg name for memory locations
                 return  self.loc_type == __value.loc_type and \
+                        self.reg_name == __value.reg_name and \
                         self.offset == __value.offset
         return False
 
@@ -53,5 +53,17 @@ class Location:
             return f'{self.reg_name}'
         elif self.loc_type == LocationType.Stack:
             return f'Stack[{self.offset:#x}]'
+        elif self.loc_type == LocationType.Memory:
+            if self.reg_name:
+                # register-based address
+                if self.offset > 0:
+                    return f'Mem[{self.reg_name}+{self.offset:#x}]'
+                elif self.offset < 0:
+                    return f'Mem[{self.reg_name}{self.offset:#x}]'
+                else:
+                    return f'Mem[{self.reg_name}]'
+            else:
+                # memory offset
+                return f'Mem[{self.offset:#x}]'
         else:
-            return f'Mem[{self.offset:#x}]'
+            return f'LocType={self.loc_type},Reg={self.reg_name},Off={self.offset}'

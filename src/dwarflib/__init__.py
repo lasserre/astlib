@@ -9,6 +9,7 @@ from elftools.dwarf.descriptions import ExprDumper, describe_DWARF_expr
 from elftools.dwarf.locationlists import *
 
 from pathlib import Path
+import re
 from typing import Generator, Iterator, Set, List, Any, Dict
 
 from varlib.datatype import *
@@ -280,6 +281,15 @@ def to_varlib_location(self:DIE):
             raise Exception(f'Unexpected DWARF register string "{loc_str}"')
         regname = parts[1][:-1]     # take everything but closing paren
         return Location(LocationType.Register, reg_name=regname)
+    elif loc_str.startswith('DW_OP_bregx'):
+        # NOTE: have to check bregx FIRST since we also have breg[0..31]
+        pass    # TODO - handle bregx when I have a test case...
+    elif loc_str.startswith('DW_OP_breg'):
+        # breg[0..31]
+        m = re.match('.*\((.+)\):\s+(\S+)', self.location_str)
+        regname = m.groups()[0]
+        offset = int(m.groups()[1])
+        return Location(LocationType.Memory, reg_name=regname, offset=offset)
 
     raise Exception(f'Handle DWARF location: {self.location_str}')
     # import IPython; IPython.embed()
