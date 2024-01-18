@@ -113,7 +113,23 @@ def to_varlib_dtype(node:ASTNode, typename_basic:bool=False) -> datatype.DataTyp
     elif node.kind == 'TypedefType':
         # convert to canonical type (remove typdefs)
         return to_varlib_dtype(node.decl.inner[0], typename_basic)
+    elif node.kind == 'Type':
+        # SOMETHING WENT WRONG during Ghidra AST export
+        # we do create these, but only 1) if there was an unhandled metatype and
+        # 2) as a placeholder for undefinedX types (which are getting replaced
+        #    with builtin types)
+        # -> unhandled metatypes should be filtered out as failed funcs via .log
+        #    files, so this probably means our placeholder did not get processed
+        # **I've seen this happen for types Ghidra mishandles - like a function
+        #   argument that was: "int (*) []" (pointer to dimensionless array of int)
+        #   and Ghidra reported this as TYPE_UNKNOWN with size of 1!
+        #
+        # workaround: treat this as Void and move on...I think this is very rare
+        # and likely stems from a problem we can't solve - Ghidra mishandling types
+        return datatype.BuiltinType.create_void_type()
     elif node.kind.endswith('Type'):
+        # print(f'Unhandled AST type node "{node.kind}"')
+        # import IPython; IPython.embed()
         raise Exception(f'Unhandled AST type node "{node.kind}"')
 
     return None     # not a data type AST node
