@@ -65,8 +65,8 @@ class DataType:
 _standard_floats = {
     4: 'float',
     8: 'double',
-    10: 'float10',
-    16: 'long double',
+    10: 'long double',
+    # 16: '',
 }
 
 # <stdint.h>-style integer names:
