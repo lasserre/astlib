@@ -678,12 +678,12 @@ def convert_astfile_to_code(ast_json:Path, header_only:bool, validation_mode:boo
     print_ast = PrintASTVisitor(struct_lib, header_only, validation_mode=validation_mode)
     return print_ast.convert_ast_to_code(ast)
 
-def print_ast(args):
+def print_ast(json_file:Path, outfile:Path=None, header_only:bool=False):
     # try printing out the C syntax...for where I am right now this might help
     # quickly identify what is missing/wrong
-    ast_code = convert_astfile_to_code(Path(args.json_file), args.header_only)
-    if args.outfile:
-        with open(args.outfile, 'w') as f:
+    ast_code = convert_astfile_to_code(Path(json_file), header_only)
+    if outfile:
+        with open(outfile, 'w') as f:
             f.write(ast_code)
     else:
         print(ast_code)
@@ -697,7 +697,7 @@ def main():
         help='Only print forward-declarations and typedefs, no function body code')
     p.add_argument('-o', '--outfile', help='Write to this output filename instead of printing to stdout')
     args = p.parse_args()
-    exit(print_ast(args))
+    exit(print_ast(args.json_file, args.outfile, args.header_only))
 
 if __name__ == '__main__':
     main()
