@@ -28,6 +28,8 @@ from .datatypes import to_varlib_dtype
 # ...so (as I have demonstrated before), I may be wrong and this may not be the
 # ideal place to get this information, but this is the best I can find right now lol
 
+PAUSE_UNIMPLEMENTED = False
+
 _syntax_token_types = {
     ClangSyntaxToken.COMMENT_COLOR: 'COMMENT',
     ClangSyntaxToken.CONST_COLOR: 'CONST',
@@ -50,9 +52,51 @@ def syntaxTokenTypeStr(self:ClangSyntaxToken) -> str:
         return f'Unrecognized token type {stype}'
     return _syntax_token_types[stype]
 
-def getClangNodeName(node:ClangNode):
+class CommaToken:
+    '''
+    Only setting this up because I know Ghidra uses the comma operator, and we're
+    probably going to need to find this
+
+    Best case scenario, Ghidra exposes this as a ClangOpToken and we don't have to
+    parse it out :P
+    '''
+    def __init__(self, tok:ClangSyntaxToken):
+        self.tok = tok
+
+class GroupingToken:
+    '''
+    Represents a paren or bracket that can be opened or closed and has
+    a matching inverse with the same id
+    '''
+    def __init__(self, tok:ClangSyntaxToken):
+        self.tok = tok
+
+    @property
+    def id(self) -> int:
+        return self.tok.open if self.is_open else self.tok.close
+
+    @property
+    def is_paren(self) -> bool:
+        return self.tok.text in '()'
+
+    @property
+    def is_bracket(self) -> bool:
+        return self.tok.text in '[]'
+
+    @property
+    def is_open(self) -> bool:
+        return self.tok.open > -1
+
+    @property
+    def is_close(self) -> bool:
+        return self.tok.close > -1
+
+def getNodeName(node:ClangNode):
     # node class names are of the form ghidra.app.decompiler.NAME
     return node.__class__.__name__.split('.')[-1]
+
+def getNodeChildren(node:ClangNode) -> List[ClangNode]:
+    return [node.Child(i) for i in range(node.numChildren())]
 
 def location_from_storage(storage:ghidra.program.model.listing.VariableStorage) -> location.Location:
     if not storage.valid:
@@ -105,20 +149,15 @@ class AstBuilder:
         # find and parse func proto
         for i in range(clang_func.numChildren()):
             node = clang_func.Child(i)
-
-            if not self.main_func_decl:
-                # parseFuncProto()
-                if getClangNodeName(node) != 'ClangFuncProto':
-                    continue    # skip all the initial comments
-
-                self.main_func_decl = self._visit_node(node)  # parse func proto
-                self.main_func_body = astlib.CompoundStmt()
-                self.main_func_decl.add_child(self.main_func_body)
+            out = self._visit_node(clang_func.Child(i))
+            if isinstance(out, astlib.FunctionDecl):
+                self.main_func_decl = out
                 fbody_idx = i+1
+                break
 
         # parse function body
-        for astnode in self._visit_children(clang_func, start_idx=fbody_idx):
-            self.main_func_body.add_child(astnode)
+        fbody = CompoundStmtParser(clang_func, self, start_idx=fbody_idx).parse()
+        self.main_func_decl.add_child(fbody)
 
         # TEMP: try this, if it doesn't work we can go back to iterative
         # (push node) approach
@@ -141,7 +180,7 @@ class AstBuilder:
         return self.tudecl
 
     def _visit_node(self, node:ClangNode):
-        node_name = getClangNodeName(node)
+        node_name = getNodeName(node)
         visit_method = getattr(self, f'_visit_{node_name}', None)
 
         if not visit_method:
@@ -154,7 +193,7 @@ class AstBuilder:
 
     def _visit_children(self, node:ClangNode, start_idx:int=0) -> List[Any]:
         return_values = [self._visit_node(node.Child(i)) for i in range(start_idx, node.numChildren())]
-        return [x for x  in return_values if x is not None]
+        return [x for x in return_values if x is not None]
 
     # def _visit_ClangFunction(self, node:ClangFunction):
         # self._visit_children(node)
@@ -162,7 +201,24 @@ class AstBuilder:
     def _visit_ClangSyntaxToken(self, tok:ClangSyntaxToken):
         typestr = syntaxTokenTypeStr(tok)
         if str(tok.text) and not str(tok.text).isspace():
+            if tok.syntaxType == ClangToken.KEYWORD_COLOR:
+                if tok.text == 'void':
+                    return datatype.BuiltinType.create_void_type()
+                msg = f'Unhandled keyword {tok.text}'
+                self.console.print(msg, style='bright_yellow')
+                if PAUSE_UNIMPLEMENTED:
+                    import IPython; IPython.embed()
+                    raise Exception('done')
+
+            if tok.syntaxType == ClangToken.DEFAULT_COLOR:
+                if tok.text == ',':
+                    return CommaToken(tok)
+                return GroupingToken(tok)
+
             print(f'SYNTAX TOKEN: {tok.text}, TYPE={typestr}, OPEN={tok.getOpen()}, CLOSE={tok.getClose()}, children={tok.numChildren()}')
+            if PAUSE_UNIMPLEMENTED:
+                import IPython; IPython.embed()
+                raise Exception('done')
 
     def _visit_ClangBreak(self, cbreak:ClangBreak):
         if cbreak.numChildren() > 0:
@@ -177,18 +233,7 @@ class AstBuilder:
         # ASSUMPTION (I've validated this manually): there is 1 and only 1 ClangFuncProto,
         # and this is for the function whose AST we are generating
         # --> this corresponds to the main FunctionDecl in the TranslationUnitDecl
-
-        print(f'Func proto (numChildren = {fp.numChildren()})')
-        name = 'todo'
-        address = fp.getClangFunction().getMinAddress().getOffset()
-        return_dtype = datatype.DataType('TEMP')
-        params = []
-
-        self.console.print(f'TODO: handle func proto arguments', style='bright_yellow')
-
-        fdecl = astlib.FunctionDecl(self._new_decl_id(), name, address, False, return_dtype, params)
-        return fdecl
-
+        return FuncprotoParser(fp, self).parse()
 
     ##--------------------------------------
     # For IfStmt, WhileStmt, CompoundStmt, etc...
@@ -218,17 +263,132 @@ class AstBuilder:
         print(f'VAR TOKEN: {vtok.getText()}, numChildren={vtok.numChildren()}')
         # if vtok.getText() == '0x20002':
         #     import IPython; IPython.embed()
+        if PAUSE_UNIMPLEMENTED:
+            import IPython; IPython.embed()
+            raise Exception('done')
 
     def _visit_ClangTokenGroup(self, tg:ClangTokenGroup):
-        print('ClangTokenGroup children...')
-        # import IPython; IPython.embed()
-        self._visit_children(tg)
+        # NOTE: we may need to flatten nested CompundStmts when we are done
+        return CompoundStmtParser(tg, self).parse()
 
     def _visit_ClangStatement(self, statement:ClangStatement):
         print(f'STATEMENT: {statement.getPcodeOp().toString()} (numChildren={statement.numChildren()})')
+        import IPython; IPython.embed()
         print('visiting statement children...')
+        if PAUSE_UNIMPLEMENTED:
+            import IPython; IPython.embed()
+            if hasattr(self, 'quit'):
+                raise Exception('done')
         self._visit_children(statement)
         print('...done')
 
     def _visit_ClangOpToken(self, optoken:ClangOpToken):
         print(f'OP TOKEN: {optoken.text} (numChildren={optoken.numChildren()})')
+
+        if optoken.text == 'if':
+            import IPython; IPython.embed()
+
+        if optoken.text == '*':
+            import IPython; IPython.embed()
+
+        if PAUSE_UNIMPLEMENTED:
+            import IPython; IPython.embed()
+            raise Exception('done')
+
+    def _visit_ClangReturnType(self, rtype:ClangReturnType):
+        if rtype.dataType is None:
+            return datatype.BuiltinType.create_void_type()
+        return to_varlib_dtype(rtype.dataType)
+
+class FuncprotoParser:
+    def __init__(self, clang_fp:ClangFuncProto, builder:AstBuilder):
+        self.clang_fp = clang_fp
+        self.builder = builder
+
+    def parse(self) -> astlib.FunctionDecl:
+        # node 0: rtype
+        rtype = self.builder._visit_node(self.clang_fp.Child(0))
+        if not isinstance(rtype, datatype.DataType):
+            raise Exception(f'Expected return type to be first child of func proto')
+
+        # node 2: func name
+        fname_token:ClangFuncNameToken = self.clang_fp.Child(2)
+        if not isinstance(fname_token, ClangFuncNameToken):
+            raise Exception(f'Expected func name to be 3rd child of func proto')
+
+        fname = fname_token.text
+        address = self.clang_fp.clangFunction.minAddress.offset
+
+        # parse params
+        outputs = []
+        for i in range(3, self.clang_fp.numChildren()):
+            outputs.append(self.builder._visit_node(self.clang_fp.Child(i)))
+
+        # we should get VarDecls for each param
+        vdecl_params = [x for x in outputs if isinstance(x, astlib.VarDecl)]
+
+        # convert to ParmVarDecl to satisfy AST
+        params = [astlib.ParmVarDecl(vd.id, vd.name, vd.dtype, vd.location) for vd in vdecl_params]
+
+        return astlib.FunctionDecl(self.builder._new_decl_id(), fname, address, False, rtype, params)
+
+class CompoundStmtParser:
+    def __init__(self, node:ClangNode, builder:AstBuilder, start_idx:int=0):
+        '''
+        node: The node whose children should be added to the compound statement
+        builder: The builder to use for parsing
+        start_idx: Child index to start with, defaults to 0
+        '''
+        self.node = node
+        self.builder = builder
+        self.start_idx = start_idx
+
+    def parse(self) -> astlib.CompoundStmt:
+        stmt = astlib.CompoundStmt()
+
+        for out in self.builder._visit_children(self.node, self.start_idx):
+            if isinstance(out, astlib.ASTNode):
+                stmt.add_child(out)
+
+        return stmt
+
+class StatementParser:
+    def __init__(self, stmt:ClangStatement, builder:AstBuilder):
+        self.stmt = stmt
+        self.builder = builder
+
+    def parse(self) -> astlib.ASTNode:
+        # TODO: somewhere we are going to have an ExprParser, which is the reusable part
+
+        # things that a statement can start with:
+        # - open paren: (xyz->x).gain = 3;
+        # - var token: lvar1 = 5;
+        # - function call: myFunc();  --> this is a ClangFuncNameToken
+        # - KEYWORD?!? (confirm..) if, while, etc.
+            # - if is an OP_TOKEN
+            # - else is a SYNTAX TOKEN
+
+        # THIS IS IT! use the statement pcode op to determine what we do!
+        self.stmt.pcodeOp.mnemonic
+
+        if isinstance(self.stmt.Child(0), ClangFuncNameToken):
+            # this statement is a function call
+            pass
+        # TODO: check first child to see if it's a keyword statement (if/while/switch)
+        # elif self.builder._visit_node(self.stmt.Child(0))
+
+        # finally, assume it's a LHS = RHS; statement
+        op_tokens = [(i, x) for i, x in enumerate(getNodeChildren(self.stmt)) if getNodeName(x) == 'ClangOpToken']
+
+
+        # self.builder._visit_children(self.stmt)
+
+class ExprParser:
+    def __init__(self, node:ClangNode, builder:AstBuilder):
+        self.node = node
+        self.builder = builder
+
+    def parse(self) -> astlib.ASTNode:
+        # things that are NOT expressions
+        # - statements/blocks (if, while, switch, etc)
+        pass

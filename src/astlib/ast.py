@@ -36,12 +36,13 @@ class ASTNode:
     '''
     Base class for all concrete AST nodes
     '''
-    def __init__(self, parent:'ASTNode'=None):
+    def __init__(self, parent:'ASTNode'=None, instr_addr:int=0):
         self.inner = []
         self.parent = parent
         self.is_parent_attached:bool = False
         self.location:Location = None
         self.dtype:DataType = None
+        self.instr_addr = instr_addr
 
     def add_child(self, child:'ASTNode'):
         self.inner.append(child)
