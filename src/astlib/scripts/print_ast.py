@@ -5,7 +5,7 @@ from typing import Dict, List
 
 # from ..ast import ASTNode, dict_to_ast
 # from ..astvisitor import ASTVisitor
-from astlib import ASTNode, dict_to_ast, ASTVisitor
+from astlib import *
 
 _var_lookup = {}
 
@@ -165,7 +165,7 @@ def ast_to_code(ast:dict) -> str:
     # return '\n'.join([node_to_code(n) for n in ast['inner']])
 
 class PrintASTVisitor(ASTVisitor):
-    def __init__(self, struct_lib:Dict[int, 'StructDef'], header_only:bool=False, indent_size:int=4,
+    def __init__(self, header_only:bool=False, indent_size:int=4,
                  validation_mode:bool=False) -> None:
         super().__init__(
             warn_missing_visits=True,
@@ -175,7 +175,6 @@ class PrintASTVisitor(ASTVisitor):
                 # 'CompoundStmt'
             ]
         )
-        self.struct_lib = struct_lib
         self.header_only = header_only
         self.validation_mode = validation_mode
         self.indent_size:int = indent_size
@@ -604,7 +603,7 @@ class PrintASTVisitor(ASTVisitor):
         code += self._emit_line('}')
         return code
 
-    def visit_TranslationUnitDecl(self, tudecl:ASTNode):
+    def visit_TranslationUnitDecl(self, tudecl:TranslationUnitDecl):
         self.push_statement_mode(True)  # anything below this is a standalone statement or block
         return ''.join(self.visit(child) for child in tudecl.inner)
 
@@ -670,23 +669,15 @@ class PrintASTVisitor(ASTVisitor):
         self.pop_statement_mode()
         return code
 
-def convert_astfile_to_code(ast_json:Path, header_only:bool, validation_mode:bool=False):
-    with open(ast_json) as f:
-        data = json.load(f)
-
-    ast, struct_lib = dict_to_ast(data)
-    print_ast = PrintASTVisitor(struct_lib, header_only, validation_mode=validation_mode)
-    return print_ast.convert_ast_to_code(ast)
-
-def print_ast(json_file:Path, outfile:Path=None, header_only:bool=False):
+def print_ast(ast:ASTNode, outfile:Path=None, header_only:bool=False, validation_mode:bool=False):
     # try printing out the C syntax...for where I am right now this might help
     # quickly identify what is missing/wrong
-    ast_code = convert_astfile_to_code(Path(json_file), header_only)
+    c_code = PrintASTVisitor(header_only, validation_mode=validation_mode).convert_ast_to_code(ast)
     if outfile:
         with open(outfile, 'w') as f:
-            f.write(ast_code)
+            f.write(c_code)
     else:
-        print(ast_code)
+        print(c_code)
     # import IPython; IPython.embed()
     return 0
 
@@ -697,7 +688,8 @@ def main():
         help='Only print forward-declarations and typedefs, no function body code')
     p.add_argument('-o', '--outfile', help='Write to this output filename instead of printing to stdout')
     args = p.parse_args()
-    exit(print_ast(args.json_file, args.outfile, args.header_only))
+    ast = read_json(args.json_file)
+    exit(print_ast(ast, args.outfile, args.header_only))
 
 if __name__ == '__main__':
     main()

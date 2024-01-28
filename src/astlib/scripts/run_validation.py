@@ -13,7 +13,7 @@ from typing import Dict, List
 import astlib
 from astlib.rich_utils import df_to_richtable
 from astlib import config
-from astlib.scripts.print_ast import convert_astfile_to_code
+from astlib.scripts.print_ast import print_ast
 
 # run validation of AST export
 
@@ -291,7 +291,8 @@ def run_validation(args):
         ghidra_c_files = list(ghidracode_folder.glob('*.c'))
         for ghidra_c in ghidra_c_files:
             ast_export = (exportfolder/ghidra_c.name).with_suffix('.json')
-            header_code = convert_astfile_to_code(ast_export, header_only=True, validation_mode=True)
+            from astlib import read_json
+            header_code = print_ast(read_json(ast_export), header_only=True, validation_mode=True)
             with open(ghidra_c, 'r') as f:
                 body_code = f.read()
             with open(ghidra_c, 'w') as f:
