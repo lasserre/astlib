@@ -6,6 +6,7 @@ from typing import Dict, List
 # from ..ast import ASTNode, dict_to_ast
 # from ..astvisitor import ASTVisitor
 from astlib import *
+from varlib.datatype import *
 
 _var_lookup = {}
 
@@ -223,7 +224,8 @@ class PrintASTVisitor(ASTVisitor):
         return f'{line_suffix}\n'
 
     def convert_ast_to_code(self, node:ASTNode) -> str:
-        if node.kind != 'TranslationUnitDecl':
+        # if node.kind != 'TranslationUnitDecl':
+        if not isinstance(node, TranslationUnitDecl):
             print(f'ERROR: Top-level element is not a translation unit ({node.kind})')
             return ''
 
@@ -474,7 +476,6 @@ class PrintASTVisitor(ASTVisitor):
             else:
                 param_strlist.append(f'{self.visit(p.dtype)} {p.name}')
 
-        rtype = self.visit(fdecl.return_dtype)
         # if self.validation_mode:
         self._use_ptr_not_array = False
 
@@ -486,7 +487,7 @@ class PrintASTVisitor(ASTVisitor):
             param_str = ''
 
         semicolon = ';' if self.header_only or not fbody else ''
-        func_proto = f'{rtype} {fdecl.name}({param_str}){semicolon}'
+        func_proto = f'{fdecl.return_dtype} {fdecl.name}({param_str}){semicolon}'
 
         code = self._emit_line(func_proto)
 
@@ -634,17 +635,12 @@ class PrintASTVisitor(ASTVisitor):
         if self.statement_mode:
             code += self._start_line()
 
-        is_funcptr = self.isFuncptr(vdecl.dtype)
-        if is_funcptr or vdecl.dtype.kind == 'FunctionType':
-            # function pointer case - we need to tell FunctionType the name of
-            # this variable and let it do the printing because of C "spiral" syntax
-            self._current_varname = vdecl.name
-            code += f'{self.visit(vdecl.dtype)}{line_end}'
+        if isinstance(vdecl.dtype, PointerType) and isinstance(vdecl.dtype.pointed_to, FunctionPrototype):
+            code += f'{vdecl.dtype.pointed_to.str_with_varname(vdecl.name)}{line_end}'
         else:
-            code += self.visit(vdecl.dtype)
             nelem = self._num_vdecl_arr_elements
             arr_size = f'[{nelem}]' if nelem is not None else ''
-            code += f' {vdecl.name}{arr_size}{line_end}'
+            code += f'{vdecl.dtype} {vdecl.name}{arr_size}{line_end}'
 
         # reset state
         self._current_varname = None

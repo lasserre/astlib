@@ -18,11 +18,12 @@ class StructType(DataType):
     '''
     Structure types
     '''
-    def __init__(self, db:StructDatabase, sid:int=-1, is_class:bool=False) -> None:
+    def __init__(self, sid:int, db:StructDatabase=None, is_class:bool=False, name:str='') -> None:
         super().__init__(DataTypeCategories.Struct)
 
         self.sid = sid
         self._db = db
+        self._local_name = name     # a name we can show for cases where we don't have the StructDatabase
 
     @property
     def empty(self) -> bool:
@@ -35,6 +36,8 @@ class StructType(DataType):
     @property
     def name(self):
         '''The name of the structure'''
+        if self._db is None:
+            return self._local_name
         return '' if self.sid < 0 else self._db.structs_by_id[self.sid].name
 
     @property
@@ -98,7 +101,7 @@ class StructType(DataType):
 
     @staticmethod
     def from_dict(d:dict, sdb:StructDatabase) -> 'StructType':
-        return StructType(sdb, d['sid'])
+        return StructType(d['sid'], sdb)
 
 from .datatype import _dt_from_dict_methods
 _dt_from_dict_methods['StructType'] = StructType.from_dict

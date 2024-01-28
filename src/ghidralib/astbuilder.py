@@ -12,6 +12,8 @@ from rich.console import Console
 import astlib
 from varlib import datatype, location
 
+from .datatypes import to_varlib_dtype
+
 # NOTE: While this seems like it should be a parser (inputs are tokens), it is
 # not simply a linear stream of tokens - the base ClangToken class implements
 # ClangNode which is a tree node.
@@ -51,6 +53,26 @@ def syntaxTokenTypeStr(self:ClangSyntaxToken) -> str:
 def getClangNodeName(node:ClangNode):
     # node class names are of the form ghidra.app.decompiler.NAME
     return node.__class__.__name__.split('.')[-1]
+
+def location_from_storage(storage:ghidra.program.model.listing.VariableStorage) -> location.Location:
+    if not storage.valid:
+        raise Exception(f'Invalid storage {storage}')
+    if storage.varnodeCount != 1:
+        raise Exception(f'Unhandled varnode count of {storage.varnodeCount}')
+
+    address = storage.firstVarnode.getAddress()
+    space_name = address.addressSpace.name
+
+    if space_name == 'unique':
+        return location.Location(location.LocationType.Unique, offset=address.offset)
+    elif storage.registerStorage:
+        return location.Location(location.LocationType.Register, storage.register.name)
+    elif storage.stackOffset is not None:
+        return location.Location(location.LocationType.Stack, offset=storage.stackOffset)
+
+    print(f'Unhandled address space {space_name}')
+    import IPython; IPython.embed()
+    raise Exception(f'Unhandled address space {space_name}')
 
 class AstBuilder:
     '''Build the astlib AST for Ghidra functions'''
@@ -167,17 +189,30 @@ class AstBuilder:
         fdecl = astlib.FunctionDecl(self._new_decl_id(), name, address, False, return_dtype, params)
         return fdecl
 
-    def _visit_ClangVariableDecl(self, cvdecl:ClangVariableDecl):
-        print('TODO: vdecl')
 
-        # TODO: we can just return the VarDecl node here!
-        #   --> (CompoundStmt collects all child return vals and adds them as children)
+    ##--------------------------------------
+    # For IfStmt, WhileStmt, CompoundStmt, etc...
+    # - SyntaxToken is going to clue us in on state change ('if', 'while', etc)
+    # - SyntaxToken needs to RETURN something to let us start parsing XYZ
+    #   - IfParser(builder)
+        # parseCond
+        # parseIfBlock
+        # parseElseBlock
+    # - SyntaxToken needs to let us know when a scope is entered/exited ({ and } at least)
+    #   --> because these are AT THE SAME LEVEL as "if"/etc, I think it will work properly
+    #       since we will be ABLE to observe the scope changes without peeking
+    #       into grandchildren nodes
+    ##--------------------------------------
+
+    def _visit_ClangVariableDecl(self, cvdecl:ClangVariableDecl):
 
         # TODO: once I see what is needed to create DeclRefExpr nodes, probably also need to
         # save a mapping from (decl_id: VarDecl) so I can set referencedDecl in DeclRefExpr
 
-        import IPython; IPython.embed()
-        raise Exception('finish')
+        sym = cvdecl.highSymbol
+        return astlib.VarDecl(self._new_decl_id(), sym.name,
+            to_varlib_dtype(sym.dataType),
+            location_from_storage(sym.storage))
 
     def _visit_ClangVariableToken(self, vtok:ClangVariableToken):
         print(f'VAR TOKEN: {vtok.getText()}, numChildren={vtok.numChildren()}')

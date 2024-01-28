@@ -129,7 +129,7 @@ class BuiltinType(DataType):
         return self.standard_name
 
     def __str__(self):
-        return self.standard_name
+        return self.name if self.name else self.standard_name
 
     def __eq__(self, other, dtchain:List[str]=[]):
         if not isinstance(other, BuiltinType):
@@ -479,9 +479,12 @@ class FunctionPrototype(DataType):
     def typename_basic(self) -> str:
         return self.name if self.name else 'FuncProto'
 
-    def __str__(self):
+    def str_with_varname(self, varname:str):
         # assumes function pointer
-        return f'{self.return_dtype} (*)({",".join(str(p) for p in self.params)})'
+        return f'{self.return_dtype} (*{varname})({",".join(str(p) for p in self.params)})'
+
+    def __str__(self):
+        return self.str_with_varname('')
 
     def __eq__(self, other, dtchain:List[str]=[]):
         if not isinstance(other, FunctionPrototype):

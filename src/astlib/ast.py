@@ -47,6 +47,10 @@ class ASTNode:
         self.inner.append(child)
         child.parent = self
 
+    @property
+    def kind(self) -> str:
+        return self.__class__.__name__
+
     # this visitor_method_name lookup is the accept() part of the implementation.
     # instead of each node type manually calling the appropriate visit_mynode()
     # function, we can dynamically locate the intended function and call it
@@ -92,7 +96,7 @@ class ASTNode:
     def to_dict(self) -> dict:
         '''Converts the data type into a serializable dict'''
         return {
-            'kind': str(self.__class__.__name__),
+            'kind': self.kind,
             'inner': [n.to_dict() for n in self.inner]
         }
 
