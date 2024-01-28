@@ -1,3 +1,9 @@
 *.pyc
 *.egg-info
 __pycache__
+
+# these are for testing
+main.ast.c
+main.ghidra.c
+OLD-AST-2-main.json
+OLD-AST-main.json

@@ -1,7 +1,6 @@
 # collection of built-in format_node callbacks for ast.render()
 
-# from .ast import A
-from .astvisitor import ASTNode
+from .ast import ASTNode
 from typing import List
 
 def highlight_var_refs(varname:str, font_color:str='red'):

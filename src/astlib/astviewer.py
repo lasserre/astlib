@@ -4,7 +4,7 @@ import html
 from pathlib import Path
 from typing import Callable, Any
 
-from .astvisitor import VisitAllChildrenByDefaultVisitor, ASTNode
+from .astvisitor import VisitAllChildrenByDefaultVisitor
 
 _NODE_FMT = '''<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
 <TR><TD><b>{:}</b></TD></TR>
@@ -26,13 +26,13 @@ class NodeAttrs:
         self.font_color = font_color
 
 class ASTViewer(VisitAllChildrenByDefaultVisitor):
-    def __init__(self, format_node:Callable[[ASTNode,NodeAttrs],Any]=None) -> None:
+    def __init__(self, format_node:Callable[['ASTNode',NodeAttrs],Any]=None) -> None:
         super().__init__()
         self.g:Graph = None
         self.id_ctr = 0
         self._format_node = format_node
 
-    def render_ast(self, node:ASTNode, format:str, outfolder:Path=None, ast_name:str='',
+    def render_ast(self, node:'ASTNode', format:str, outfolder:Path=None, ast_name:str='',
                    fontname:str='Cascadia Code'):
         if not ast_name:
             ast_name = f'{node.kind}_AST'
@@ -51,13 +51,13 @@ class ASTViewer(VisitAllChildrenByDefaultVisitor):
 
         return self.g
 
-    def assign_ids(self, node:ASTNode):
+    def assign_ids(self, node:'ASTNode'):
         node._graph_id = str(self.id_ctr)
         self.id_ctr += 1
         for x in node.inner:
             self.assign_ids(x)
 
-    def visit(self, node:ASTNode, parent:ASTNode=None):
+    def visit(self, node:'ASTNode', parent:'ASTNode'=None):
         visit_method = getattr(self, node.visitor_method_name, None)
         node_attrs = visit_method(node) if visit_method else NodeAttrs(f'TODO: {node.kind}')
         if self._format_node:
@@ -67,7 +67,7 @@ class ASTViewer(VisitAllChildrenByDefaultVisitor):
         for child in node.inner:
             self.visit(child, node)
 
-    def create_graph_node(self, node:ASTNode, parent:ASTNode, attrs:NodeAttrs):
+    def create_graph_node(self, node:'ASTNode', parent:'ASTNode', attrs:NodeAttrs):
         label = _NODE_FMT.format(node.kind, html.escape(attrs.node_string))
         self.g.node(node._graph_id, label=label, color=attrs.node_color, fontcolor=attrs.font_color)
         if parent and '_graph_id' in parent.__dict__:
@@ -79,7 +79,7 @@ class ASTViewer(VisitAllChildrenByDefaultVisitor):
     def visit_BinaryOperator(self, node):
         return NodeAttrs(f'{node.opcode}')
 
-    def visit_BuiltinType(self, bit:ASTNode):
+    def visit_BuiltinType(self, bit:'ASTNode'):
         return NodeAttrs(bit.name)
 
     def visit_CallExpr(self, node):
@@ -94,17 +94,17 @@ class ASTViewer(VisitAllChildrenByDefaultVisitor):
     def visit_DeclRefExpr(self, node):
         return NodeAttrs(f'{node.referencedDecl.name}')
 
-    def visit_DeclStmt(self, stmt:ASTNode):
+    def visit_DeclStmt(self, stmt:'ASTNode'):
         return NodeAttrs('')
 
-    def visit_FloatingLiteral(self, lit:ASTNode):
+    def visit_FloatingLiteral(self, lit:'ASTNode'):
         return NodeAttrs(f'{lit.value}')
 
     def visit_ForStmt(self, fstmt):
         # return NodeAttrs(f'@ 0x{fstmt.instr_addr:x}')
         return NodeAttrs('')
 
-    def visit_FunctionDecl(self, fdecl:ASTNode):
+    def visit_FunctionDecl(self, fdecl:'ASTNode'):
         return NodeAttrs(f'{fdecl.return_dtype.dtype_str()} {fdecl.name}')
 
     def visit_IfStmt(self, node):

@@ -67,3 +67,14 @@ class Location:
                 return f'Mem[{self.offset:#x}]'
         else:
             return f'LocType={self.loc_type},Reg={self.reg_name},Off={self.offset}'
+
+    def to_dict(self) -> dict:
+        return {
+            'loc_type': self.loc_type,
+            'loc_off': self.offset,
+            'loc_reg': self.reg_name
+        }
+
+    @staticmethod
+    def from_dict(d:dict) -> 'Location':
+        return Location(d['loc_type'], d['loc_reg'], int(d['loc_off']))

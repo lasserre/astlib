@@ -23,8 +23,13 @@ class DataType:
     '''
     Abstract base DataType class
     '''
-    def __init__(self, category:str) -> None:
+    def __init__(self, category:str, typedef_name:str=None) -> None:
+        '''
+        category: Category for this data type from DataTypeCategories
+        typedef_name: If applicable, the typedef name that was used to refer to this (canonical) type
+        '''
         self.category = category
+        self.typedef_name = typedef_name
 
     @property
     def typename_basic(self) -> str:
@@ -59,7 +64,8 @@ class DataType:
 
     def _get_base_dict(self) -> dict:
         return {
-            'kind': str(self.__class__.__name__)
+            'kind': str(self.__class__.__name__),
+            'typedef': self.typedef_name
         }
 
 _standard_floats = {
@@ -537,4 +543,6 @@ _dt_from_dict_methods = {
 def datatype_from_dict(d:dict, sdb) -> 'DataType':
     if d['kind'] not in _dt_from_dict_methods:
         raise NotImplementedError(f'DataType kind {d["kind"]} not mapped to a from_dict method')
-    return _dt_from_dict_methods[d['kind']](d, sdb)
+    dt = _dt_from_dict_methods[d['kind']](d, sdb)
+    dt.typedef_name = d['typedef'] if 'typedef' in d else None
+    return dt

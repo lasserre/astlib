@@ -1,4 +1,5 @@
 from .astviewer import *
+from .ast import ASTNode
 
 from typing import List
 
