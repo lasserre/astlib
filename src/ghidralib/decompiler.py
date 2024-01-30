@@ -124,8 +124,8 @@ def do_export_asts(run:Run, params:Dict[str,Any], outputs:Dict[str,Any]):
             if rcode != 0:
                 raise Exception(f'Ghidra postscript processing failed with return code {rcode}')
 
-def export_asts(debug_binaries:bool):
+def export_asts(debug:bool):
     params = {
-        'debug_binaries': debug_binaries
+        'debug_binaries': debug
     }
-    return RunStep(f'export_asts_{"debug" if debug_binaries else "strip"}', do_export_asts, params)
+    return RunStep(f'export_asts_{"debug" if debug else "strip"}', do_export_asts, params)
