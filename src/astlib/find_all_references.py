@@ -1,6 +1,7 @@
 from .astviewer import *
 
 from typing import List
+from .ast import ASTNode
 
 class FindAllVarRefs(VisitAllChildrenByDefaultVisitor):
     def __init__(self, varname:str) -> None:

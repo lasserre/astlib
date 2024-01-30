@@ -18,11 +18,12 @@ class StructType(DataType):
     '''
     Structure types
     '''
-    def __init__(self, db:StructDatabase, sid:int=-1, is_class:bool=False) -> None:
+    def __init__(self, db:StructDatabase, sid:int=-1, is_class:bool=False, name:str='') -> None:
         super().__init__(DataTypeCategories.Struct)
 
         self.sid = sid
         self._db = db
+        self._local_name = name     # a name we can show for cases where we don't have the StructDatabase
 
     @property
     def empty(self) -> bool:
@@ -35,6 +36,8 @@ class StructType(DataType):
     @property
     def name(self):
         '''The name of the structure'''
+        if self._db is None:
+            return self._local_name
         return '' if self.sid < 0 else self._db.structs_by_id[self.sid].name
 
     @property
@@ -80,7 +83,7 @@ class StructType(DataType):
     def __str__(self):
         return self.name
 
-    def __eq__(self, other, dtchain:List[str]=[]):
+    def __eq__(self, other, dtchain:List[str]=None):
         if not isinstance(other, StructType):
             return False
         if self._struct_def is None:
@@ -93,12 +96,92 @@ class StructType(DataType):
     def to_dict(self) -> dict:
         return {
             **self._get_base_dict(),
-            'sid': self.sid
+            'sid': self.sid,
+            'name': self.name,
         }
 
     @staticmethod
     def from_dict(d:dict, sdb:StructDatabase) -> 'StructType':
-        return StructType(sdb, d['sid'])
+        return StructType(sdb, d['sid'], name=d['name'])
+
+# NOTE: I think unions should be treated as their own type...
+# since we care so much about offsets in structure recovery,
+# unions are handled quite differently since everything is at
+# offset = 0.
+
+class UnionTypeBasic(DataType):
+    '''
+    Fake UnionType whose only purpose is to participate in typename_basic
+    '''
+    def __init__(self, name:str):
+        super().__init__(DataTypeCategories.Union)
+        self.name = name
+
+    @property
+    def typename_basic(self) -> str:
+        return self.name
+
+class UnionType(DataType):
+    '''
+    Union types
+    '''
+    def __init__(self, db:StructDatabase, sid:int=-1, name:str='') -> None:
+        super().__init__(DataTypeCategories.Union)
+        self.name = name
+
+    @property
+    def fields(self) -> List[StructField]:
+        '''A list of the fields in the union'''
+        layout = self.layout
+        return layout.fields_by_offset if layout else []
+
+    @property
+    def layout(self) -> UnionLayout:
+        '''The member layout information for the structure'''
+        return None if self.sid < 0 else self._db.structs_by_id[self.sid].layout
+
+    @property
+    def size(self):
+        return max(f.size for f in self.fields)
+
+    @property
+    def type_sequence(self) -> str:
+        return 'UNION'
+
+    @property
+    def typename_basic(self) -> str:
+        return self.name
+
+    @property
+    def _union_def(self) -> UnionDefinition:
+        if self.sid < 0:
+            return None
+        return self._db.structs_by_id[self.sid]
+
+    def __str__(self):
+        return self.name
+
+    def __hash__(self):
+        return hash(tuple(self.fields))
+
+    def __eq__(self, other, dtchain:List[str]=None):
+        if not isinstance(other, UnionType):
+            return False
+        if self._union_def is None:
+            return other._union_def is None    # technically equal :)
+        return self._union_def.__eq__(other._union_def, dtchain)
+
+    def to_dict(self) -> dict:
+        return {
+            **self._get_base_dict(),
+            'sid': self.sid,
+            'name': self.name,
+        }
+
+    @staticmethod
+    def from_dict(d:dict, sdb) -> 'UnionType':
+        return UnionType(sdb, d['sid'], d['name'])
 
 from .datatype import _dt_from_dict_methods
 _dt_from_dict_methods['StructType'] = StructType.from_dict
+_dt_from_dict_methods['UnionType'] = UnionType.from_dict

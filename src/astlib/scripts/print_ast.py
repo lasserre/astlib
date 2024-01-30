@@ -5,7 +5,8 @@ from typing import Dict, List
 
 # from ..ast import ASTNode, dict_to_ast
 # from ..astvisitor import ASTVisitor
-from astlib import ASTNode, dict_to_ast, ASTVisitor
+from astlib import *
+from varlib.datatype import *
 
 _var_lookup = {}
 
@@ -165,7 +166,7 @@ def ast_to_code(ast:dict) -> str:
     # return '\n'.join([node_to_code(n) for n in ast['inner']])
 
 class PrintASTVisitor(ASTVisitor):
-    def __init__(self, struct_lib:Dict[int, 'StructDef'], header_only:bool=False, indent_size:int=4,
+    def __init__(self, header_only:bool=False, indent_size:int=4,
                  validation_mode:bool=False) -> None:
         super().__init__(
             warn_missing_visits=True,
@@ -175,7 +176,6 @@ class PrintASTVisitor(ASTVisitor):
                 # 'CompoundStmt'
             ]
         )
-        self.struct_lib = struct_lib
         self.header_only = header_only
         self.validation_mode = validation_mode
         self.indent_size:int = indent_size
@@ -224,7 +224,8 @@ class PrintASTVisitor(ASTVisitor):
         return f'{line_suffix}\n'
 
     def convert_ast_to_code(self, node:ASTNode) -> str:
-        if node.kind != 'TranslationUnitDecl':
+        # if node.kind != 'TranslationUnitDecl':
+        if not isinstance(node, TranslationUnitDecl):
             print(f'ERROR: Top-level element is not a translation unit ({node.kind})')
             return ''
 
@@ -475,7 +476,6 @@ class PrintASTVisitor(ASTVisitor):
             else:
                 param_strlist.append(f'{self.visit(p.dtype)} {p.name}')
 
-        rtype = self.visit(fdecl.return_dtype)
         # if self.validation_mode:
         self._use_ptr_not_array = False
 
@@ -487,7 +487,7 @@ class PrintASTVisitor(ASTVisitor):
             param_str = ''
 
         semicolon = ';' if self.header_only or not fbody else ''
-        func_proto = f'{rtype} {fdecl.name}({param_str}){semicolon}'
+        func_proto = f'{fdecl.return_dtype} {fdecl.name}({param_str}){semicolon}'
 
         code = self._emit_line(func_proto)
 
@@ -604,7 +604,7 @@ class PrintASTVisitor(ASTVisitor):
         code += self._emit_line('}')
         return code
 
-    def visit_TranslationUnitDecl(self, tudecl:ASTNode):
+    def visit_TranslationUnitDecl(self, tudecl:TranslationUnitDecl):
         self.push_statement_mode(True)  # anything below this is a standalone statement or block
         return ''.join(self.visit(child) for child in tudecl.inner)
 
@@ -635,17 +635,12 @@ class PrintASTVisitor(ASTVisitor):
         if self.statement_mode:
             code += self._start_line()
 
-        is_funcptr = self.isFuncptr(vdecl.dtype)
-        if is_funcptr or vdecl.dtype.kind == 'FunctionType':
-            # function pointer case - we need to tell FunctionType the name of
-            # this variable and let it do the printing because of C "spiral" syntax
-            self._current_varname = vdecl.name
-            code += f'{self.visit(vdecl.dtype)}{line_end}'
+        if isinstance(vdecl.dtype, PointerType) and isinstance(vdecl.dtype.pointed_to, FunctionType):
+            code += f'{vdecl.dtype.pointed_to.str_with_varname(vdecl.name)}{line_end}'
         else:
-            code += self.visit(vdecl.dtype)
             nelem = self._num_vdecl_arr_elements
             arr_size = f'[{nelem}]' if nelem is not None else ''
-            code += f' {vdecl.name}{arr_size}{line_end}'
+            code += f'{vdecl.dtype} {vdecl.name}{arr_size}{line_end}'
 
         # reset state
         self._current_varname = None
@@ -670,23 +665,15 @@ class PrintASTVisitor(ASTVisitor):
         self.pop_statement_mode()
         return code
 
-def convert_astfile_to_code(ast_json:Path, header_only:bool, validation_mode:bool=False):
-    with open(ast_json) as f:
-        data = json.load(f)
-
-    ast, struct_lib = dict_to_ast(data)
-    print_ast = PrintASTVisitor(struct_lib, header_only, validation_mode=validation_mode)
-    return print_ast.convert_ast_to_code(ast)
-
-def print_ast(json_file:Path, outfile:Path=None, header_only:bool=False):
+def print_ast(ast:ASTNode, outfile:Path=None, header_only:bool=False, validation_mode:bool=False):
     # try printing out the C syntax...for where I am right now this might help
     # quickly identify what is missing/wrong
-    ast_code = convert_astfile_to_code(Path(json_file), header_only)
+    c_code = PrintASTVisitor(header_only, validation_mode=validation_mode).convert_ast_to_code(ast)
     if outfile:
         with open(outfile, 'w') as f:
-            f.write(ast_code)
+            f.write(c_code)
     else:
-        print(ast_code)
+        print(c_code)
     # import IPython; IPython.embed()
     return 0
 
@@ -697,7 +684,8 @@ def main():
         help='Only print forward-declarations and typedefs, no function body code')
     p.add_argument('-o', '--outfile', help='Write to this output filename instead of printing to stdout')
     args = p.parse_args()
-    exit(print_ast(args.json_file, args.outfile, args.header_only))
+    ast = read_json(args.json_file)
+    exit(print_ast(ast, args.outfile, args.header_only))
 
 if __name__ == '__main__':
     main()

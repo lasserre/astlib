@@ -1,6 +1,7 @@
+from itertools import chain
 import json
 from pathlib import Path
-from typing import List, Dict, Iterable, Callable
+from typing import List, Dict, Iterable, Callable, Any
 
 from .structlayout import *
 
@@ -26,7 +27,8 @@ class StructDatabase:
     Holds the structure definitions across an entire program context
     '''
     def __init__(self) -> None:
-        self.structs_by_id:Dict[int, StructDefinition] = {}     # maps sid: StructType
+        self.structs_by_id:Dict[int, StructDefinition] = {}     # maps sid: StructDefinition
+        self.unions_by_id:Dict[int, UnionDefinition] = {}       # maps sid: UnionDefinition
         self.sids_by_name:Dict[str, List[int]] = {}             # maps name: list of sids with this name
         self.sid_by_tu_and_name:Dict[str, int] = {}             # maps 'tuid:name': sid
         self._next_sid = 0
@@ -39,23 +41,34 @@ class StructDatabase:
         # - rebuild sids_by_name as we read it in (don't save here)
         # - sid_by_tu_and_name is only for initial construction, at this point we are done
         #   and you only look up structs via sid
-        return {sid: sdef.to_dict() for sid, sdef in self.structs_by_id.items()}
+        return {
+            'structs_by_id': {
+                sid: sdef.to_dict() for sid, sdef in self.structs_by_id.items()
+            },
+            'unions_by_id': {
+                sid: udef.to_dict() for sid, udef in self.unions_by_id.items()
+            }
+        }
 
     @staticmethod
     def from_dict(d:Dict[int,dict]) -> 'StructDatabase':
         sdb = StructDatabase()
-        sdb.structs_by_id = {int(sid): StructDefinition.from_dict(sd_dict, sdb) for sid, sd_dict in d.items()}
+        sdb.structs_by_id = {int(sid): StructDefinition.from_dict(sd_dict, sdb) for sid, sd_dict in d['structs_by_id'].items()}
+        sdb.unions_by_id = {int(sid): UnionDefinition.from_dict(ud_dict, sdb) for sid, ud_dict in d['unions_by_id'].items()}
 
         print(f'CLS: I think sids will be strings here...confirm, then convert to int first', flush=True)
         # rebuild sids_by_name
-        for sid, sdef in sdb.structs_by_id.items():
+        for sid, sdef in chain(sdb.structs_by_id.items(), sdb.unions_by_id.items()):
             if sdef.name not in sdb.sids_by_name:
                 sdb.sids_by_name[sdef.name] = [sid]
             else:
                 sdb.sids_by_name[sdef.name].append(sid)
 
         # idk that we need it, but reset this so if we add a new struct its ready to go
-        sdb._next_sid = max(sdb.structs_by_id.keys()) + 1
+        max_struct_id = max(sdb.structs_by_id.keys()) + 1
+        max_union_id = max(sdb.unions_by_id.keys()) + 1
+
+        sdb._next_sid = max(max_struct_id, max_union_id)
         return sdb
 
     def to_json(self, filepath:Path):
@@ -111,7 +124,7 @@ class StructDatabase:
         '''
         return self.map_struct_type(tuid, StructDefinition(name, StructLayout(), is_class))
 
-    def map_struct_type(self, tuid:str, sdef:StructDefinition) -> int:
+    def map_struct_type(self, tuid:str, sdef:Any, is_union:bool) -> int:
         '''
         Maps stype into the given translation unit and returns the sid for the
         resulting structure.
@@ -128,7 +141,10 @@ class StructDatabase:
         self._next_sid += 1
 
         # 1) map the sid to the definition itself
-        self.structs_by_id[new_sid] = sdef
+        if is_union:
+            self.unions_by_id[new_sid] = sdef
+        else:
+            self.structs_by_id[new_sid] = sdef
 
         # 2) map the sid inside its translation unit (tuid/name)
         struct_key = self._get_struct_key(tuid, sdef.name)
