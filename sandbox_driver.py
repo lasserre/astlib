@@ -39,8 +39,8 @@ with OpenSharedGhidraProject(host, repoName, port) as proj:
     fm = prog.getFunctionManager()
     nonthunks = (x for x in fm.getFunctions(True) if not x.isThunk())
 
-    # test_func = [x for x in nonthunks if x.name == 'a_listener_set_gain'][0]
-    test_func = [x for x in nonthunks if x.name == 'main'][0]
+    # test_func = [x for x in nonthunks if x.name == 'main'][0]
+    test_func = [x for x in nonthunks if x.name == 'a_listener_set_gain'][0]
     # print(test_func.name)
 
     ifc = get_decompiler_interface(prog)

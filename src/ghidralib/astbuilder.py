@@ -371,6 +371,12 @@ class StatementParser:
         # THIS IS IT! use the statement pcode op to determine what we do!
         self.stmt.pcodeOp.mnemonic
 
+        # TODO: what if we build up a statement at least using pcode ops?
+        # - I don't want to parse expressions...we have the structure
+        # --> use a hybrid of tokens and pcodeops to parse/build the AST
+        #    - the tokens give me a known context (statement) and have strings I can see "*"
+        #    - the pcode ops give me OPCODES (for BinOp, etc) and specific inputs/outputs
+
         if isinstance(self.stmt.Child(0), ClangFuncNameToken):
             # this statement is a function call
             pass
