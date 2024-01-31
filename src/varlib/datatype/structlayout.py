@@ -1,16 +1,6 @@
-from typing import Dict, List
+from typing import Dict, List, Set
 
-# throwing this together quickly, but the intent is to provide a helper class that helps
-# import struct definitions from the AST, DWARF, etc. and manages some of the logic
-# about unique struct definitions to prevent us from re-defining every struct type
-# every single time we see it in a dataset (which is what is happening now, and we're
-# hitting recursion limits as well as running unecessarily slow)
-
-# TODO: just make this the StructDatabase -> now StructType just holds its sid and
-# can wrap the internal definition of the structure layout (StructLayout) with properties
-# to preserve the same API
-
-from .datatype import datatype_from_dict, DataType
+from .datatypes import datatype_from_dict, DataType
 
 class StructField:
     '''
@@ -135,12 +125,12 @@ class UnionLayout:
         #   for structs that have pointers to themselves
         return hash(tuple([x.name for x in self.fields]))
 
-    def get_first_level_layout(self) -> List[str]:
+    def get_first_level_layout(self) -> Set[str]:
         '''
         Returns a mapping of {offset: type name} for the top-level members of this
         structure (for quicker equality comparisons across translation units)
         '''
-        return [f.dtype.typename_basic for f in self.fields]
+        return set(f.dtype.typename_basic for f in self.fields)
 
     def to_dict(self) -> dict:
         return {

@@ -167,7 +167,7 @@ class BuiltinType(DataType):
 
     @staticmethod
     def from_dict(d:dict, sdb) -> 'BuiltinType':
-        return BuiltinType(name=d['name'], floating_point=d['fp'], signed=d['sign'], size=d['size'])
+        return BuiltinType(name=d['name'], floating_point=d['is_fp'], signed=d['signed'], size=d['size'])
 
 class PointerType(DataType):
     '''
@@ -214,12 +214,12 @@ class PointerType(DataType):
         return {
             **self._get_base_dict(),
             'size': self.pointer_size,
-            'inner': self.pointed_to.to_dict(),
+            'inner': [self.pointed_to.to_dict()],
         }
 
     @staticmethod
     def from_dict(d:dict, sdb) -> 'PointerType':
-        return PointerType(datatype_from_dict(d['inner'], sdb), d['size'])
+        return PointerType(datatype_from_dict(d['inner'][0], sdb), d['size'])
 
 class ArrayType(DataType):
     '''
@@ -265,12 +265,12 @@ class ArrayType(DataType):
         return {
             **self._get_base_dict(),
             'nelem': self.num_elements,
-            'inner': self.element_type.to_dict()
+            'inner': [self.element_type.to_dict()]
         }
 
     @staticmethod
     def from_dict(d:dict, sdb) -> 'ArrayType':
-        return ArrayType(datatype_from_dict(d['inner'], sdb), d['nelem'])
+        return ArrayType(datatype_from_dict(d['inner'][0], sdb), d['nelem'])
 
 class EnumType(DataType):
     def __init__(self, name:str, dt_size:int=4) -> None:

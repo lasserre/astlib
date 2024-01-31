@@ -138,26 +138,52 @@ def get_layout_from_structDIE(sdie:DIE) -> StructLayout:
     member_dies = [memberDIE_to_varlib(mdie) for mdie in sdie.iter_children() if mdie.tag == 'DW_TAG_member']
     return StructLayout({x[0]: x[1] for x in member_dies})
 
+def get_layout_from_unionDIE(udie:DIE) -> UnionLayout:
+    return UnionLayout([memberDIE_to_varlib(mdie)[1] for mdie in udie.iter_children() if mdie.tag == 'DW_TAG_member'])
+
 def get_fllayout_for_struct(sdie:DIE) -> Dict[int, str]:
     return {offset_from_memberDIE(mdie): to_varlib_dtype(mdie, typename_basic=True).typename_basic  \
                      for mdie in sdie.iter_children() if mdie.tag == 'DW_TAG_member'}
 
+def get_fllayout_for_union(udie:DIE) -> Set[str]:
+    return set(to_varlib_dtype(mdie, typename_basic=True).typename_basic for mdie in udie.iter_children() if mdie.tag == 'DW_TAG_member')
+
 def structDIE_to_varlib(sdie:DIE, name:str, is_class:bool=False):
+    return get_record_type_from_die(sdie, name, is_union=False, is_class=is_class)
+
+def get_record_type_from_die(die:DIE, name:str, is_union:bool, is_class:bool=False):
     global _struct_db
 
-    is_fwd_decl = 'DW_AT_declaration' in sdie.attributes
+    is_fwd_decl = 'DW_AT_declaration' in die.attributes
     # tuid = ''   # try without differentiating by TU
-    tuid = sdie.cu.get_top_DIE().name
+    tuid = die.cu.get_top_DIE().name
 
-    sid = _struct_db.get_sid(tuid, name, is_fwd_decl,
-                lambda: get_fllayout_for_struct(sdie))
+    sid = _struct_db.get_sid(tuid, name, is_fwd_decl, is_union,
+                lambda: get_fllayout_for_struct(die),
+                lambda: get_fllayout_for_union(die))
 
     if sid == -1:
         # unmapped type - need to define it
-        sid = _struct_db.map_struct_type_empty(tuid, name, is_class, is_union=False)    # 1. map a new structure with this name (creates sid)
-        stype = StructType(_struct_db, sid)                             # 2. NOW define fields (after mapping to prevent recursion issues)
-        stype.layout = get_layout_from_structDIE(sdie)
-        return stype
+        if is_union:
+            sid = _struct_db.map_union_type_empty(tuid, name)   # map new union with this name
+            utype = UnionType(_struct_db, sid)
+            utype.layout = get_layout_from_unionDIE(die)
+            return utype
+        else:
+            # 1. map a new structure with this name (creates sid)
+            sid = _struct_db.map_struct_type_empty(tuid, name, is_class)
+            stype = StructType(_struct_db, sid)
+            # 2. NOW define fields (after mapping to prevent recursion issues)
+            stype.layout = get_layout_from_structDIE(die)
+            return stype
+    elif is_union:
+        utype = UnionType(_struct_db, sid)
+        if utype.empty and not is_fwd_decl:
+            # existing type has no fields but this DIE has the definition
+            # (this is same as below, but struct version has more comments)
+            utype.layout = UnionLayout([StructField(BuiltinType.create_void_type(), 'DUMMY')])
+            utype.layout = get_layout_from_unionDIE(die)
+        return utype
     else:
         stype = StructType(_struct_db, sid)     # get existing type from sid
         if stype.empty and not is_fwd_decl:
@@ -172,13 +198,11 @@ def structDIE_to_varlib(sdie:DIE, name:str, is_class:bool=False):
 
             # now that stype.empty will return FALSE if we have a recursively defined type,
             # we can go ahead and (re)set the actual layout now
-            stype.layout = get_layout_from_structDIE(sdie)
+            stype.layout = get_layout_from_structDIE(die)
         return stype
 
-def unionDIE_to_varlib(udie:DIE):
-    utype = UnionType([], udie.name)
-    utype.fields = [StructField(to_varlib_dtype(x), x.name) for x in udie.iter_children() if x.tag == 'DW_TAG_member']
-    return utype
+def unionDIE_to_varlib(udie:DIE, name:str):
+    return get_record_type_from_die(udie, name, is_union=True)
 
 _basetype_encoding_to_tuple = {
     # value: (isFloating, isSigned)
@@ -234,7 +258,7 @@ def to_varlib_dtype(self:DIE, typedef_name:str='', typename_basic:bool=False):
         return BuiltinType(self.type_die.name, is_float, is_signed, self.type_die.byte_size)
     elif self.type_die.tag == 'DW_TAG_array_type':
         subrange = [x for x in self.type_die.iter_children() if x.tag == 'DW_TAG_subrange_type'][0]
-        if subrange.upper_bound:
+        if subrange.upper_bound and not isinstance(subrange.upper_bound, list):
             num_elems = subrange.upper_bound + 1
         elif subrange.count:
             num_elems = subrange.count
@@ -244,7 +268,8 @@ def to_varlib_dtype(self:DIE, typedef_name:str='', typename_basic:bool=False):
         arrtype.element_type = to_varlib_dtype(self.type_die, typedef_name, typename_basic)
         return arrtype
     elif self.type_die.tag == 'DW_TAG_union_type':
-        return UnionTypeBasic(self.type_die.name) if typename_basic else unionDIE_to_varlib(self.type_die)
+        name = get_typename(self)
+        return UnionTypeBasic(self.type_die.name) if typename_basic else unionDIE_to_varlib(self.type_die, name)
     elif self.type_die.tag == 'DW_TAG_subroutine_type':
         fproto = FunctionType(None, [], typedef_name)
         if not typename_basic:
@@ -256,6 +281,20 @@ def to_varlib_dtype(self:DIE, typedef_name:str='', typename_basic:bool=False):
         name = get_typename(self)
         return EnumType(name)
 
+    # C++ workarounds...
+    if self.type_die.tag == 'DW_TAG_reference_type' or \
+       self.type_die.tag == 'DW_TAG_rvalue_reference_type':
+        # HACK: treat reference types as pointers for now
+        ptype = PointerType(None, self.type_die.byte_size)
+        ptype.pointed_to = to_varlib_dtype(self.type_die, typedef_name, typename_basic)
+        return ptype
+    elif self.type_die.tag == 'DW_TAG_ptr_to_member_type':
+        # HACK: treat ptr_to_member (C++-ism) as void*
+        return PointerType(BuiltinType.create_void_type(), self.type_die.byte_size)
+    elif self.type_die.tag == 'DW_TAG_unspecified_type':
+        if self.type_die.name == 'decltype(nullptr)':
+            return PointerType(BuiltinType.create_void_type(), self.type_die.byte_size)
+
     raise Exception(f'UNHANDLED type_die tag: {self.type_die.tag}')
     # print(f'UNHANDLED type_die tag: {self.type_die.tag}')
     # import IPython; IPython.embed()
@@ -264,8 +303,15 @@ def to_varlib_location(self:DIE):
     loc_str = self.location_str
     if not loc_str:
         return Location(LocationType.Undefined)
+    elif ';' in loc_str:
+        # print(f'Skipping DWARF location {loc_str}...')
+        return Location(LocationType.Undefined)
 
     if loc_str.startswith('DW_OP_fbreg'):
+        # deref_str = '; DW_OP_deref'
+        # if loc_str.endswith(deref_str):
+        #     # just remove this for now...
+        #     loc_str = loc_str[:-len(deref_str)]
         cfa_offset = int(loc_str.split(':')[1].strip())
         # NOTE: this assumes 64-bit code where CFA is the stack pointer at the call site
         # just before the return IP is pushed

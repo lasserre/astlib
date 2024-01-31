@@ -1,6 +1,5 @@
-from .datatype import *
+from .datatypes import *
 from .structlayout import *
-from .structdatabase import *
 
 class StructTypeBasic(DataType):
     '''
@@ -18,7 +17,7 @@ class StructType(DataType):
     '''
     Structure types
     '''
-    def __init__(self, db:StructDatabase, sid:int=-1, is_class:bool=False, name:str='') -> None:
+    def __init__(self, db:'StructDatabase', sid:int=-1, is_class:bool=False, name:str='') -> None:
         super().__init__(DataTypeCategories.Struct)
 
         self.sid = sid
@@ -101,7 +100,7 @@ class StructType(DataType):
         }
 
     @staticmethod
-    def from_dict(d:dict, sdb:StructDatabase) -> 'StructType':
+    def from_dict(d:dict, sdb) -> 'StructType':
         return StructType(sdb, d['sid'], name=d['name'])
 
 # NOTE: I think unions should be treated as their own type...
@@ -125,20 +124,43 @@ class UnionType(DataType):
     '''
     Union types
     '''
-    def __init__(self, db:StructDatabase, sid:int=-1, name:str='') -> None:
+    def __init__(self, db:'StructDatabase', sid:int=-1, name:str='') -> None:
         super().__init__(DataTypeCategories.Union)
-        self.name = name
+        self.sid = sid
+        self._db = db
+        self._local_name = name     # a name we can show for cases where we don't have the StructDatabase
+
+    @property
+    def name(self):
+        '''The name of the union'''
+        if self._db is None:
+            return self._local_name
+        return '' if self.sid < 0 else self._db.unions_by_id[self.sid].name
+
+    @property
+    def empty(self) -> bool:
+        '''
+        True if this union has no content defined
+        (e.g. is a forward declaration)
+        '''
+        return not bool(self.fields)
 
     @property
     def fields(self) -> List[StructField]:
         '''A list of the fields in the union'''
         layout = self.layout
-        return layout.fields_by_offset if layout else []
+        return layout.fields if layout else []
 
     @property
     def layout(self) -> UnionLayout:
         '''The member layout information for the structure'''
-        return None if self.sid < 0 else self._db.structs_by_id[self.sid].layout
+        return None if self.sid < 0 else self._db.unions_by_id[self.sid].layout
+
+    @layout.setter
+    def layout(self, value:UnionLayout):
+        if self.sid < 0:
+            return
+        self._db.unions_by_id[self.sid].layout = value
 
     @property
     def size(self):
@@ -156,7 +178,7 @@ class UnionType(DataType):
     def _union_def(self) -> UnionDefinition:
         if self.sid < 0:
             return None
-        return self._db.structs_by_id[self.sid]
+        return self._db.unions_by_id[self.sid]
 
     def __str__(self):
         return self.name
@@ -182,6 +204,6 @@ class UnionType(DataType):
     def from_dict(d:dict, sdb) -> 'UnionType':
         return UnionType(sdb, d['sid'], d['name'])
 
-from .datatype import _dt_from_dict_methods
+from .datatypes import _dt_from_dict_methods
 _dt_from_dict_methods['StructType'] = StructType.from_dict
 _dt_from_dict_methods['UnionType'] = UnionType.from_dict

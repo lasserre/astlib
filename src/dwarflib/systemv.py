@@ -2,7 +2,6 @@ from enum import Enum
 from typing import List
 
 from varlib.datatype import *
-from varlib import StructType
 from varlib.location import Location, LocationType
 
 # CLS: wasn't sure the best place for this but I need to be able to reuse it
