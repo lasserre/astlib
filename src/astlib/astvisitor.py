@@ -1,15 +1,6 @@
 from typing import List, Any, Dict
 from rich.console import Console
 
-class ASTNode:
-    # this visitor_method_name lookup is the accept() part of the implementation.
-    # instead of each node type manually calling the appropriate visit_mynode()
-    # function, we can dynamically locate the intended function and call it
-    # here based on the node's type
-    @property
-    def visitor_method_name(self) -> str:
-        return f'visit_{self.kind}'
-
 class ASTVisitor:
     '''
     Dynamically implements the visit() logic. Concrete visitors should do
@@ -39,7 +30,7 @@ class ASTVisitor:
         '''
         return self.warn_missing_visits and node_kind not in self.missing_visit_methods
 
-    def visit(self, node:ASTNode):
+    def visit(self, node):
         visit_method = getattr(self, node.visitor_method_name, None)
 
         if not visit_method and self.missing_method_should_be_logged(node.kind):
@@ -59,7 +50,7 @@ class VisitAllChildrenByDefaultVisitor(ASTVisitor):
     def __init__(self) -> None:
         super().__init__(warn_missing_visits=False, missing_visit_methods=[])
 
-    def visit(self, node:ASTNode):
+    def visit(self, node):
         return_vals = []
         visit_method = getattr(self, node.visitor_method_name, None)
 
@@ -75,7 +66,7 @@ class VisitAllChildrenByDefaultVisitor(ASTVisitor):
 
         # return self._visit_all_children(node)
 
-    # def _visit_all_children(self, node:ASTNode):
+    # def _visit_all_children(self, node):
     #     return self._aggregate_child_results([self.visit(child) for child in node.inner])
 
     # def _aggregate_child_results(self, child_return_vals:List[Any]) -> Any:
@@ -102,9 +93,9 @@ class StructTypeAndValueDeclLookup(VisitAllChildrenByDefaultVisitor):
         self.struct_lib = struct_lib
 
         # maps var id -> ASTNode
-        self._var_lookup:Dict[int,ASTNode] = {}
+        self._var_lookup = {}
         # maps typedef name -> typedef decl
-        self._typedef_lookup:Dict[str,ASTNode] = {}
+        self._typedef_lookup = {}
 
         # _save_mode == False:
         #   > 1x through, don't save bc lookup dict isn't complete yet
@@ -113,7 +104,7 @@ class StructTypeAndValueDeclLookup(VisitAllChildrenByDefaultVisitor):
         #   > 2x through, just set DeclRefExpr.referencedDecl = ASTNode via the lookup table
         self._save_mode = False
 
-    def extract(self, node:ASTNode, save_result:bool) -> Dict[int,ASTNode]:
+    def extract(self, node, save_result:bool) -> dict:
         '''
         node: The head node to start visiting
         save_result: If true, the resulting variable lookup dictionary
@@ -128,52 +119,52 @@ class StructTypeAndValueDeclLookup(VisitAllChildrenByDefaultVisitor):
             self.visit(node)    # save referencedDecl for each DeclRefExpr node
         return self._var_lookup
 
-    def visit_CStyleCastExpr(self, castexpr:ASTNode):
+    def visit_CStyleCastExpr(self, castexpr):
         self.visit(castexpr.dtype)
 
-    def visit_DeclRefExpr(self, refexpr:ASTNode):
+    def visit_DeclRefExpr(self, refexpr):
         if self._save_mode:
             refexpr.referencedDecl = self._var_lookup[refexpr.referencedDecl_id]
 
-    def visit_EnumConstantDecl(self, node:ASTNode):
+    def visit_EnumConstantDecl(self, node):
         if not self._save_mode:
             self._var_lookup[node.id] = node
 
-    def visit_FieldDecl(self, fdecl:ASTNode):
+    def visit_FieldDecl(self, fdecl):
         self.visit(fdecl.dtype)
 
-    def visit_FunctionDecl(self, node:ASTNode):
+    def visit_FunctionDecl(self, node):
         if not self._save_mode:
             self._var_lookup[node.id] = node
         self.visit(node.return_dtype)
 
-    def visit_FunctionType(self, ftype:ASTNode):
+    def visit_FunctionType(self, ftype):
         self.visit(ftype.return_dtype)
 
-    def visit_ParmVarDecl(self, node:ASTNode):
+    def visit_ParmVarDecl(self, node):
         if not self._save_mode:
             self._var_lookup[node.id] = node
         self.visit(node.dtype)
 
-    def visit_RecordDecl(self, rd:ASTNode):
+    def visit_RecordDecl(self, rd):
         rd._struct_def = self.struct_lib[rd.sid]
 
-    def visit_StructType(self, node:ASTNode):
+    def visit_StructType(self, node):
         if node._struct_def.sid == -1:
             # only visit this StructType if it hasn't yet been visited
             node._struct_def = self.struct_lib[node.sid]
             for f in node.fields:
                 self.visit(f.dtype)
 
-    def visit_TypedefDecl(self, tddecl:ASTNode):
+    def visit_TypedefDecl(self, tddecl):
         if not self._save_mode:
             self._typedef_lookup[tddecl.name] = tddecl
 
-    def visit_TypedefType(self, tdtype:ASTNode):
+    def visit_TypedefType(self, tdtype):
         if self._save_mode:
             tdtype.decl = self._typedef_lookup[tdtype.name] if tdtype.name in self._typedef_lookup else None
 
-    def visit_VarDecl(self, node:ASTNode):
+    def visit_VarDecl(self, node):
         if not self._save_mode:
             self._var_lookup[node.id] = node
         self.visit(node.dtype)
@@ -182,24 +173,24 @@ class DatatypePrinter(ASTVisitor):
     def __init__(self) -> None:
         super().__init__(warn_missing_visits=False)
 
-    def to_string(self, dtype:ASTNode):
+    def to_string(self, dtype):
         return self.visit(dtype)
 
-    def isFuncptr(self, dtype:ASTNode):
+    def isFuncptr(self, dtype):
         if dtype.kind == 'PointerType':
             while dtype.kind == 'PointerType':  # walk through pointer layers...
                 dtype = dtype.inner[0]
             return dtype.kind == 'FunctionType'
         return False
 
-    def visit(self, node:ASTNode):
+    def visit(self, node):
         visit_method = getattr(self, node.visitor_method_name, None)
         return visit_method(node) if visit_method else f'TODO: visit method for {node.kind}'
 
-    def visit_BuiltinType(self, bit:ASTNode):
+    def visit_BuiltinType(self, bit):
         return bit.name
 
-    def visit_FunctionType(self, ftype:ASTNode):
+    def visit_FunctionType(self, ftype):
         is_fptr = ftype.parent.kind == 'PointerType'
         # fname = self._current_varname if self._current_varname else 'TODO_SET_CURRENT_VARNAME'
         fname = 'f'
@@ -211,7 +202,7 @@ class DatatypePrinter(ASTVisitor):
             return f'{self.visit(ftype.return_dtype)} (*{fname})({param_str})'
         return f'{self.visit(ftype.return_dtype)} {fname}({param_str})'
 
-    def visit_PointerType(self, pt:ASTNode):
+    def visit_PointerType(self, pt):
         if pt.inner[0].kind == 'FunctionType':
             # don't add anything, FunctionType will handle the whole thing
             return self.visit(pt.inner[0])
@@ -220,7 +211,7 @@ class DatatypePrinter(ASTVisitor):
     def visit_TypedefType(self, tdtype):
         return tdtype.name
 
-    def visit_VoidType(self, vt:ASTNode):
+    def visit_VoidType(self, vt):
         return "void"
 
 class HasNodeTypesVisitor(ASTVisitor):
@@ -236,7 +227,7 @@ class HasNodeTypesVisitor(ASTVisitor):
         self._result = False
         self._types_found = set()
 
-    def visit(self, node:ASTNode):
+    def visit(self, node):
         if self._result:
             return self._result  # we've already figured it out, we're done
 
@@ -262,7 +253,7 @@ class GetNodesAtAddr(ASTVisitor):
         self.addr = addr
         self.node_matches = []
 
-    def visit(self, node:ASTNode):
+    def visit(self, node):
         if 'instr_addr' in node.__dict__:
             if node.instr_addr == self.addr:
                 self.node_matches.append(node)

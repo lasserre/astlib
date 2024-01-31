@@ -246,7 +246,7 @@ def to_varlib_dtype(self:DIE, typedef_name:str='', typename_basic:bool=False):
     elif self.type_die.tag == 'DW_TAG_union_type':
         return UnionTypeBasic(self.type_die.name) if typename_basic else unionDIE_to_varlib(self.type_die)
     elif self.type_die.tag == 'DW_TAG_subroutine_type':
-        fproto = FunctionPrototype(None, [], typedef_name)
+        fproto = FunctionType(None, [], typedef_name)
         if not typename_basic:
             # only grab the signature if we're doing the full definition
             fproto.return_dtype = to_varlib_dtype(self.type_die) if self.type_die.type_die else BuiltinType.create_void_type()
