@@ -154,7 +154,7 @@ def structDIE_to_varlib(sdie:DIE, name:str, is_class:bool=False):
 
     if sid == -1:
         # unmapped type - need to define it
-        sid = _struct_db.map_struct_type_empty(tuid, name, is_class)    # 1. map a new structure with this name (creates sid)
+        sid = _struct_db.map_struct_type_empty(tuid, name, is_class, is_union=False)    # 1. map a new structure with this name (creates sid)
         stype = StructType(_struct_db, sid)                             # 2. NOW define fields (after mapping to prevent recursion issues)
         stype.layout = get_layout_from_structDIE(sdie)
         return stype

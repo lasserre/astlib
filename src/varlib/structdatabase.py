@@ -117,12 +117,12 @@ class StructDatabase:
 
         return -1   # unable to find a match anywhere
 
-    def map_struct_type_empty(self, tuid:str, name:str, is_class:bool=False) -> int:
+    def map_struct_type_empty(self, tuid:str, name:str, is_class:bool=False, is_union:bool=False) -> int:
         '''
         Same as map_struct_type, but creates an empty StructureDefinition with the
         given name and returns the assigned sid
         '''
-        return self.map_struct_type(tuid, StructDefinition(name, StructLayout(), is_class))
+        return self.map_struct_type(tuid, StructDefinition(name, StructLayout(), is_class), is_union)
 
     def map_struct_type(self, tuid:str, sdef:Any, is_union:bool) -> int:
         '''
