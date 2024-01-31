@@ -32,6 +32,7 @@ def decompile_all(export_folder:Path, host:str, repo:str, folder:str, binaryName
     failed_decompilations = []
 
     with OpenSharedGhidraProject(host, repo, port) as proj:
+        print(f'Opening shared project @ {host}:{port}: repo={repo}, folder={folder}, binary={binaryName}')
         prog = proj.openProgram(folder, binaryName, True)
         fm = prog.getFunctionManager()
         ifc = get_decompiler_interface(prog)
@@ -113,7 +114,7 @@ def do_export_asts(run:Run, params:Dict[str,Any], outputs:Dict[str,Any]):
             rcode = subprocess.call([
                 'ghidra_decompile_all', ast_folder,
                 'localhost', repo, ghidra_folder, bin_symlink.name,
-                '--timeout_sec', DECOMPILE_TIMEOUT, '--ast-only'
+                '--timeout_sec', str(DECOMPILE_TIMEOUT), '--ast-only'
             ])
             if rcode != 0:
                 raise Exception(f'Ghidra postscript processing failed with return code {rcode}')
