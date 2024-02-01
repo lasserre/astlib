@@ -1,4 +1,5 @@
 from typing import List, Any, Dict
+from rich.console import Console
 
 class DataTypeCategories:
     BuiltIn = 'BUILTIN'
@@ -61,6 +62,41 @@ class DataType:
         return {
             'kind': str(self.__class__.__name__)
         }
+
+class Type(DataType):
+    '''
+    Sometimes when the AST export code cannot resolve a type, we may
+    get datatype instances of Type in the JSON export.
+
+    This is just to wrap those instances and allow us to detect and
+    filter them out downstream
+    '''
+    def __init__(self, name:str) -> None:
+        super().__init__('Type')
+        self.name = name
+
+    @property
+    def typename_basic(self) -> str:
+        return 'Type'
+
+    @property
+    def inner(self):
+        return []
+
+    @property
+    def size(self):
+        return 0
+
+    @property
+    def to_dict(self) -> dict:
+        return {
+            **self._get_base_dict(),
+            'name': self.name,
+        }
+
+    @staticmethod
+    def from_dict(d:dict, sdb) -> 'BuiltinType':
+        return Type(d['name'])
 
 _standard_floats = {
     4: 'float',
@@ -404,6 +440,7 @@ _dt_from_dict_methods = {
     'EnumType': EnumType.from_dict,
     'FunctionType': FunctionType.from_dict,
     'PointerType': PointerType.from_dict,
+    'Type': Type.from_dict,
 }
 
 def datatype_from_dict(d:dict, sdb) -> 'DataType':
