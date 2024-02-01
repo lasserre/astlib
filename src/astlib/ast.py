@@ -182,11 +182,22 @@ _decl_types = {
     3: 'EnumDecl'
 }
 
+class EnumConstantDecl(ASTNode):
+    '''
+    Not a full-fledged EnumConstantDecl - just a thin wrapper that
+    DeclRefExpr can return for referenced enum types (since we don't
+    want to export the full definition)
+    '''
+    def __init__(self, name:str, value:int):
+        super().__init__()
+
 class DeclRefExpr(ASTNode):
     def __init__(self, tudecl:'TranslationUnitDecl', referenced_id:int=-1, decl_type:int=-1, instr_addr:int=-1):
         super().__init__(instr_addr=instr_addr)
         self.referenced_id = referenced_id
         self.decl_type = decl_type
+        self.enum_name = ''
+        self.enum_val = -1
         self._tudecl = tudecl
 
     @property
@@ -202,18 +213,28 @@ class DeclRefExpr(ASTNode):
 
     @property
     def referencedDecl(self) -> 'ValueDecl':
+        if self.decl_type == 3:
+            return EnumConstantDecl(self.enum_name, self.enum_val)
         return self.tudecl._decls_by_id[self.referenced_id]
 
     def to_dict(self) -> dict:
-        return {
+        d = {
             **super().to_dict(),
             'type': self.decl_type,
             'referencedDecl_id': self.referenced_id,
         }
+        if self.enum_name:
+            d['enum_const_name'] = self.enum_name
+            d['enum_const_value'] = self.enum_val
+        return d
 
     @staticmethod
     def from_dict(d:dict, ctx:FromDictContext) -> 'DeclRefExpr':
         dre = DeclRefExpr(ctx.tudecl, d['referencedDecl_id'], d['type'], d['instr_addr'])
+        if 'enum_const_name' in d:
+            dre.enum_name = d['enum_const_name']
+        if 'enum_const_value' in d:
+            dre.enum_val = d['enum_const_value']
         dre._children_from_dict(d, ctx)
         return dre
 

@@ -3,6 +3,7 @@ import argparse
 import json
 from pathlib import Path
 import subprocess
+import shutil
 import typing
 if typing.TYPE_CHECKING:
     import ghidra
@@ -104,6 +105,10 @@ def do_export_asts(run:Run, params:Dict[str,Any], outputs:Dict[str,Any]):
             ast_config = fb.data_folder/'ghidra_ast.json'
             ast_folder = fb.data_folder/'ast_dumps'/'stripped'
             fb.data['stripped_asts'] = ast_folder
+
+        # clear existing ast folder if it exists (like reset_data for this ast export folder)
+        if ast_folder.exists():
+            shutil.rmtree(ast_folder)
         ast_folder.mkdir(exist_ok=True, parents=True)     # folder has to exist or we don't get output!
 
         # write AST config file, process the imported binary
