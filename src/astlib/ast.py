@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Callable, Any, List, Dict
 
 from varlib import StructDatabase
-from varlib.datatype import DataType, datatype_from_dict
+from varlib.datatype import DataType, datatype_from_dict, EnumType
 from varlib.location import Location, LocationType
 
 from .astvisitor import DatatypePrinter, HasNodeTypesVisitor, GetNodesAtAddr
@@ -190,6 +190,9 @@ class EnumConstantDecl(ASTNode):
     '''
     def __init__(self, name:str, value:int):
         super().__init__()
+        self.name = name
+        self.value = value
+        self.dtype = EnumType(name)
 
 class DeclRefExpr(ASTNode):
     def __init__(self, tudecl:'TranslationUnitDecl', referenced_id:int=-1, decl_type:int=-1, instr_addr:int=-1):
