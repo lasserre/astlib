@@ -26,6 +26,12 @@ class StructField:
     def __hash__(self):
         return hash((self.dtype,))
 
+    def __str__(self):
+        return f'{self.dtype} {self.name}'
+
+    def __repr__(self) -> str:
+        return str(self)
+
     def to_dict(self) -> dict:
         return {
             'name': self.name,
@@ -65,6 +71,12 @@ class StructLayout:
         # - use field.name instead of the field hash to avoid any recursive issues
         #   for structs that have pointers to themselves
         return hash(tuple([self.fields_by_offset[k].name for k in sorted(self.fields_by_offset.keys())]))
+
+    def __str__(self):
+        return '\n'.join([f'{k:#x}: {self.fields_by_offset[k]}' for k in sorted(self.fields_by_offset.keys())])
+
+    def __repr__(self) -> str:
+        return str(self)
 
     def get_first_level_layout(self) -> Dict[int,str]:
         '''
@@ -125,6 +137,12 @@ class UnionLayout:
         #   for structs that have pointers to themselves
         return hash(tuple([x.name for x in self.fields]))
 
+    def __str__(self):
+        return '\n'.join([str(f) for f in self.fields])
+
+    def __repr__(self) -> str:
+        return str(self)
+
     def get_first_level_layout(self) -> Set[str]:
         '''
         Returns a mapping of {offset: type name} for the top-level members of this
@@ -184,6 +202,13 @@ class StructDefinition:
     def __hash__(self):
         return hash(self.name)      # these tend to be unique for structures...
 
+    def __str__(self):
+        tabbed_layout = '\n'.join([f'\t{member}' for member in str(self.layout).split('\n')])
+        return f'struct {self.name} {{\n{tabbed_layout}\n}}'
+
+    def __repr__(self) -> str:
+        return str(self)
+
     def to_dict(self) -> dict:
         return {
             'name': self.name,
@@ -225,6 +250,13 @@ class UnionDefinition:
 
     def __hash__(self):
         return hash(self.name)
+
+    def __str__(self):
+        tabbed_layout = '\n'.join([f'\t{member}' for member in str(self.layout).split('\n')])
+        return f'union {self.name} {{\n{tabbed_layout}\n}}'
+
+    def __repr__(self) -> str:
+        return str(self)
 
     def to_dict(self) -> dict:
         return {

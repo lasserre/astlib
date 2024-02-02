@@ -56,7 +56,6 @@ class StructDatabase:
         sdb.structs_by_id = {int(sid): StructDefinition.from_dict(sd_dict, sdb) for sid, sd_dict in d['structs_by_id'].items()}
         sdb.unions_by_id = {int(sid): UnionDefinition.from_dict(ud_dict, sdb) for sid, ud_dict in d['unions_by_id'].items()}
 
-        print(f'CLS: I think sids will be strings here...confirm, then convert to int first', flush=True)
         # rebuild sids_by_name
         for sid, sdef in chain(sdb.structs_by_id.items(), sdb.unions_by_id.items()):
             if sdef.name not in sdb.sids_by_name:
