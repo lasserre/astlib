@@ -50,8 +50,13 @@ class DataType:
         raise NotImplementedError(f'size property not implemented in {self.__class__}')
 
     @property
-    def type_sequence(self) -> str:
+    def type_sequence_str(self) -> str:
         '''Returns the data type sequence as a CSV string'''
+        raise NotImplementedError(f'type_sequence_str property not implemented in {self.__class__}')
+
+    @property
+    def type_sequence(self) -> List['DataType']:
+        '''Returns the data type sequence as a list of the actual types'''
         raise NotImplementedError(f'type_sequence property not implemented in {self.__class__}')
 
     def to_dict(self) -> dict:
@@ -189,8 +194,12 @@ class BuiltinType(DataType):
         return self._size
 
     @property
-    def type_sequence(self) -> str:
+    def type_sequence_str(self) -> str:
         return self.standard_name
+
+    @property
+    def type_sequence(self) -> List['DataType']:
+        return [self]
 
     def to_dict(self) -> dict:
         return {
@@ -223,8 +232,12 @@ class PointerType(DataType):
         return self.pointer_size
 
     @property
-    def type_sequence(self) -> str:
-        return f'PTR,{self.pointed_to.type_sequence}'
+    def type_sequence_str(self) -> str:
+        return f'PTR,{self.pointed_to.type_sequence_str}'
+
+    @property
+    def type_sequence(self) -> List['DataType']:
+        return [self, *self.pointed_to.type_sequence]
 
     @property
     def typename_basic(self) -> str:
@@ -275,8 +288,12 @@ class ArrayType(DataType):
         return self.num_elements * self.element_type.size if self.num_elements else 0
 
     @property
-    def type_sequence(self) -> str:
-        return f'ARR,{self.element_type.type_sequence}'
+    def type_sequence_str(self) -> str:
+        return f'ARR,{self.element_type.type_sequence_str}'
+
+    @property
+    def type_sequence(self) -> List['DataType']:
+        return [self, *self.element_type.type_sequence]
 
     @property
     def typename_basic(self) -> str:
@@ -319,8 +336,12 @@ class EnumType(DataType):
         return self.dt_size
 
     @property
-    def type_sequence(self) -> str:
+    def type_sequence_str(self) -> str:
         return 'ENUM'
+
+    @property
+    def type_sequence(self) -> List['DataType']:
+        return [self]
 
     @property
     def typename_basic(self) -> str:
@@ -372,8 +393,12 @@ class FunctionType(DataType):
         return 0    # this should have a pointer parent, whose size is meaningful
 
     @property
-    def type_sequence(self) -> str:
+    def type_sequence_str(self) -> str:
         return 'FUNC'
+
+    @property
+    def type_sequence(self) -> List['DataType']:
+        return [self]
 
     @property
     def typename_basic(self) -> str:

@@ -66,8 +66,12 @@ class StructType(DataType):
         return sum(f.size for f in self.fields_by_offset.values())
 
     @property
-    def type_sequence(self) -> str:
+    def type_sequence_str(self) -> str:
         return 'STRUCT'
+
+    @property
+    def type_sequence(self) -> List['DataType']:
+        return [self]
 
     @property
     def typename_basic(self) -> str:
@@ -81,6 +85,9 @@ class StructType(DataType):
 
     def __str__(self):
         return self.name
+
+    def __repr__(self) -> str:
+        return str(self._struct_def) if self._db else f'struct {self} (sid={self.sid})'
 
     def __eq__(self, other, dtchain:List[str]=None):
         if not isinstance(other, StructType):
@@ -167,8 +174,12 @@ class UnionType(DataType):
         return max(f.size for f in self.fields)
 
     @property
-    def type_sequence(self) -> str:
+    def type_sequence_str(self) -> str:
         return 'UNION'
+
+    @property
+    def type_sequence(self) -> List['DataType']:
+        return [self]
 
     @property
     def typename_basic(self) -> str:
@@ -182,6 +193,9 @@ class UnionType(DataType):
 
     def __str__(self):
         return self.name
+
+    def __repr__(self) -> str:
+        return str(self._union_def) if self._db else f'union {self} (sid={self.sid})'
 
     def __hash__(self):
         return hash(tuple(self.fields))
