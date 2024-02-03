@@ -131,7 +131,7 @@ def do_export_asts(run:Run, params:Dict[str,Any], outputs:Dict[str,Any]):
         ]
 
         with env({'GHIDRA_AST_CONFIG_FILE': str(ast_config)}):
-            print(f'Running command: {" ".join(str(x) for x in decompile_cmdline)}')
+            # print(f'Running command: {" ".join(str(x) for x in decompile_cmdline)}')
             rcode = subprocess.call(decompile_cmdline)
             if rcode != 0:
                 raise Exception(f'Ghidra postscript processing failed with return code {rcode}')
