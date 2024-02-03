@@ -3,12 +3,12 @@ from rich.console import Console
 
 class DataTypeCategories:
     BuiltIn = 'BUILTIN'
-    Pointer = 'POINTER'
-    Array = 'ARRAY'
+    Pointer = 'PTR'
+    Array = 'ARR'
     Struct = 'STRUCT'
     Union = 'UNION'
     Enum = 'ENUM'
-    Function = 'FUNCTION'
+    Function = 'FUNC'
 
     @staticmethod
     def get_list() -> List[str]:
@@ -25,7 +25,12 @@ class DataType:
     Abstract base DataType class
     '''
     def __init__(self, category:str) -> None:
-        self.category = category
+        self._category = category   # readonly
+
+    @property
+    def category(self) -> str:
+        '''The data type category for this instance'''
+        return self._category
 
     @property
     def typename_basic(self) -> str:
@@ -103,15 +108,14 @@ class Type(DataType):
     def from_dict(d:dict, sdb) -> 'BuiltinType':
         return Type(d['name'])
 
-_standard_floats = {
+_standard_floats_by_size = {
     4: 'float',
     8: 'double',
     10: 'long double',
     # 16: '',
 }
 
-# <stdint.h>-style integer names:
-_standard_unsigned_ints = {
+_standard_uints_by_size = {
     1: 'uchar',
     2: 'ushort',
     4: 'uint32',
@@ -119,13 +123,17 @@ _standard_unsigned_ints = {
     16: 'uint128',
 }
 
-_standard_signed_ints = {
+_standard_ints_by_size = {
     1: 'char',
     2: 'short',
     4: 'int32',
     8: 'int64',
     16: 'int128',
 }
+
+_standard_floats_by_name = {nm: sz for sz, nm in _standard_floats_by_size.items()}
+_standard_uints_by_name = {nm: sz for sz, nm in _standard_uints_by_size.items()}
+_standard_ints_by_name = {nm: sz for sz, nm in _standard_ints_by_size.items()}
 
 class BuiltinType(DataType):
     '''
@@ -153,11 +161,11 @@ class BuiltinType(DataType):
         if self.is_void:
             return 'void'
         if self.floating_point:
-            return _standard_floats[self.size] if self.size in _standard_floats else f'UNMAPPED_FLOAT_{self.size}'
+            return _standard_floats_by_size[self.size] if self.size in _standard_floats_by_size else f'UNMAPPED_FLOAT_{self.size}'
         elif self.signed:
-            return _standard_signed_ints[self.size] if self.size in _standard_signed_ints else f'UNMAPPED_INT_{self.size}'
+            return _standard_ints_by_size[self.size] if self.size in _standard_ints_by_size else f'UNMAPPED_INT_{self.size}'
         else:
-            return _standard_unsigned_ints[self.size] if self.size in _standard_unsigned_ints else f'UNMAPPED_UINT_{self.size}'
+            return _standard_uints_by_size[self.size] if self.size in _standard_uints_by_size else f'UNMAPPED_UINT_{self.size}'
 
     @property
     def typename_basic(self) -> str:
@@ -233,7 +241,7 @@ class PointerType(DataType):
 
     @property
     def type_sequence_str(self) -> str:
-        return f'PTR,{self.pointed_to.type_sequence_str}'
+        return f'{self.category},{self.pointed_to.type_sequence_str}'
 
     @property
     def type_sequence(self) -> List['DataType']:
@@ -289,7 +297,7 @@ class ArrayType(DataType):
 
     @property
     def type_sequence_str(self) -> str:
-        return f'ARR,{self.element_type.type_sequence_str}'
+        return f'{self.category},{self.element_type.type_sequence_str}'
 
     @property
     def type_sequence(self) -> List['DataType']:
@@ -337,7 +345,7 @@ class EnumType(DataType):
 
     @property
     def type_sequence_str(self) -> str:
-        return 'ENUM'
+        return self.category
 
     @property
     def type_sequence(self) -> List['DataType']:
@@ -394,7 +402,7 @@ class FunctionType(DataType):
 
     @property
     def type_sequence_str(self) -> str:
-        return 'FUNC'
+        return self.category
 
     @property
     def type_sequence(self) -> List['DataType']:

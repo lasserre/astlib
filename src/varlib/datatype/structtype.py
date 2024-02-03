@@ -67,7 +67,7 @@ class StructType(DataType):
 
     @property
     def type_sequence_str(self) -> str:
-        return 'STRUCT'
+        return self.category
 
     @property
     def type_sequence(self) -> List['DataType']:
@@ -175,7 +175,7 @@ class UnionType(DataType):
 
     @property
     def type_sequence_str(self) -> str:
-        return 'UNION'
+        return self.category
 
     @property
     def type_sequence(self) -> List['DataType']:
