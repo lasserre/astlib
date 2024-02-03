@@ -125,6 +125,10 @@ def to_varlib_dtype(gdt:DataType, length:int, typedef_name:str=None) -> datatype
     if isinstance(gdt, VoidDataType):
         return _void_to_varlib(gdt, length, typedef_name)
 
+    if isinstance(gdt, WideCharDataType):
+        name = typedef_name if typedef_name else gdt.name
+        return datatype.BuiltinType(name, floating_point=False, signed=False, size=gdt.length)
+
     if isinstance(gdt, ghidra.app.plugin.exceptionhandlers.gcc.datatype.DwarfEncodingModeDataType):
         # types we don't care about...
         return datatype.BuiltinType.create_void_type()

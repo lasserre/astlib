@@ -31,7 +31,6 @@ def export_ghidra_types_to_sdb(dtmgr:DataTypeManager) -> StructDatabase:
     # Ghidra already has unique ids - just construct structs/unions_by_id manually
     sdb = StructDatabase()
 
-    print(f'Exporting struct/union definitions...')
     for ghidra_type in show_progress(dtmgr.getAllComposites(), total=len(list(dtmgr.getAllComposites()))):
         dtype = to_varlib_dtype(ghidra_type, ghidra_type.getLength())
         if isinstance(dtype, StructType):
@@ -46,7 +45,6 @@ def export_ghidra_types_to_sdb(dtmgr:DataTypeManager) -> StructDatabase:
     # with typedef name right now - just return canonical type)
     typedef_types = [x for x in dtmgr.getAllDataTypes() if isinstance(x, ghidra.program.model.data.TypeDef)]
 
-    print(f'Mapping typedef ids...')
     for td in show_progress(typedef_types, total=len(typedef_types)):
         canonical_type = td.getBaseDataType()
         if isinstance(canonical_type, ghidra.program.model.data.Structure):

@@ -27,9 +27,9 @@ def decompile_all(export_folder:Path, host:str, repo:str, folder:str, binaryName
     from ghidra.app.decompiler import DecompInterface, DecompileOptions
     from ghidra.program.database import ProgramDB
 
-    from .opensharedghidraproject import OpenSharedGhidraProject
-    from .decompiler import get_decompiler_interface
-    from .export_types import export_ghidra_types_to_sdb
+    from ghidralib.opensharedghidraproject import OpenSharedGhidraProject
+    from ghidralib.decompiler import get_decompiler_interface
+    from ghidralib.export_types import export_ghidra_types_to_sdb
 
     failed_decompilations = []
 
@@ -40,7 +40,7 @@ def decompile_all(export_folder:Path, host:str, repo:str, folder:str, binaryName
         ifc = get_decompiler_interface(prog)
 
         sdb_file = export_folder/f'{binaryName}.sdb'
-        print(f'Exporting all Ghidra data types to {sdb_file}')
+        print(f'Exporting all Ghidra data types to {sdb_file.name}...')
         sdb = export_ghidra_types_to_sdb(prog.getDataTypeManager())
         sdb.to_json(sdb_file)
 
@@ -124,12 +124,15 @@ def do_export_asts(run:Run, params:Dict[str,Any], outputs:Dict[str,Any]):
         with open(ast_config, 'w') as f:
             f.write(json.dumps({'output_folder': str(ast_folder)}))
 
+        decompile_cmdline = [
+            'ghidra_decompile_all', ast_folder,
+            'localhost', repo, ghidra_folder, bin_symlink.name,
+            '--timeout_sec', str(DECOMPILE_TIMEOUT), '--ast-only'
+        ]
+
         with env({'GHIDRA_AST_CONFIG_FILE': str(ast_config)}):
-            rcode = subprocess.call([
-                'ghidra_decompile_all', ast_folder,
-                'localhost', repo, ghidra_folder, bin_symlink.name,
-                '--timeout_sec', str(DECOMPILE_TIMEOUT), '--ast-only'
-            ])
+            print(f'Running command: {" ".join(str(x) for x in decompile_cmdline)}')
+            rcode = subprocess.call(decompile_cmdline)
             if rcode != 0:
                 raise Exception(f'Ghidra postscript processing failed with return code {rcode}')
 
@@ -142,3 +145,6 @@ def export_asts(debug:bool):
         'debug_binaries': debug
     }
     return RunStep(f'export_asts_{"debug" if debug else "strip"}', do_export_asts, params)
+
+if __name__ == '__main__':
+    exit(decompile_all_main())
