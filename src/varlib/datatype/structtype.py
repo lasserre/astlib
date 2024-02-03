@@ -56,6 +56,12 @@ class StructType(DataType):
         self._db.structs_by_id[self.sid].layout = value
 
     @property
+    def ghidra_uid(self) -> int:
+        if self.sid >= 0 and self._db:
+            return self._db.structs_by_id[self.sid].ghidra_uid
+        return -1
+
+    @property
     def fields_by_offset(self) -> Dict[int, StructField]:
         '''A dictionary mapping field offsets to their StructField definitions'''
         layout = self.layout
@@ -168,6 +174,12 @@ class UnionType(DataType):
         if self.sid < 0:
             return
         self._db.unions_by_id[self.sid].layout = value
+
+    @property
+    def ghidra_uid(self) -> int:
+        if self.sid >= 0 and self._db:
+            return self._db.unions_by_id[self.sid].ghidra_uid
+        return -1
 
     @property
     def size(self):

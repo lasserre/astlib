@@ -13,7 +13,7 @@ from typing import Dict, Any
 from wildebeest import RunStep
 from wildebeest.run import Run
 from wildebeest.postprocessing import FlatLayoutBinary, get_ghidra_folder_for_run, get_binary_symlink_name
-from wildebeest.utils import env
+from wildebeest.utils import env, show_progress
 from wildebeest.ghidrautil import GhidraKeys
 
 def decompile_all(export_folder:Path, host:str, repo:str, folder:str, binaryName:str, timeout_sec:int, max_funcs:int=-1,
@@ -29,6 +29,7 @@ def decompile_all(export_folder:Path, host:str, repo:str, folder:str, binaryName
 
     from .opensharedghidraproject import OpenSharedGhidraProject
     from .decompiler import get_decompiler_interface
+    from .export_types import export_ghidra_types_to_sdb
 
     failed_decompilations = []
 
@@ -37,12 +38,23 @@ def decompile_all(export_folder:Path, host:str, repo:str, folder:str, binaryName
         prog = proj.openProgram(folder, binaryName, True)
         fm = prog.getFunctionManager()
         ifc = get_decompiler_interface(prog)
+
+        sdb_file = export_folder/f'{binaryName}.sdb'
+        print(f'Exporting all Ghidra data types to {sdb_file}')
+        sdb = export_ghidra_types_to_sdb(prog.getDataTypeManager())
+        sdb.to_json(sdb_file)
+
         if ast_only:
             ifc.toggleCCode(False)
 
-        nonthunks = (x for x in fm.getFunctions(True) if not x.isThunk())
+        def get_nonthunks(fm:ghidra.program.model.listing.FunctionManager):
+            return (x for x in fm.getFunctions(True) if not x.isThunk())
 
-        for i, func in enumerate(nonthunks):
+        nonthunks = get_nonthunks(fm)
+        total_funcs = len(list(get_nonthunks(fm)))
+
+        print(f'Exporting function asts...')
+        for i, func in show_progress(enumerate(nonthunks), total=total_funcs):
             if max_funcs > -1 and i >= max_funcs:
                 break
 
@@ -53,9 +65,6 @@ def decompile_all(export_folder:Path, host:str, repo:str, folder:str, binaryName
                 print(res.getErrorMessage())
                 failed_decompilations.append(address)
                 continue
-
-            if (i+1) % 500 == 0:
-                print(f'Exported {i+1:,} functions...')
 
     # log addresses of failed decompilations
     if failed_decompilations:
@@ -123,6 +132,10 @@ def do_export_asts(run:Run, params:Dict[str,Any], outputs:Dict[str,Any]):
             ])
             if rcode != 0:
                 raise Exception(f'Ghidra postscript processing failed with return code {rcode}')
+
+            # move sdb files up to the data folder
+            for sdb_file in ast_folder.glob('*.sdb'):
+                shutil.move(sdb_file, fb.data_folder/sdb_file.name)
 
 def export_asts(debug:bool):
     params = {

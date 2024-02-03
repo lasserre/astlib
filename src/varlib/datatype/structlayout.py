@@ -172,10 +172,11 @@ class StructDefinition:
     declared types (that are empty until we know the definition later), recursively defined types
     (e.g. struct with a pointer to itself), etc.
     '''
-    def __init__(self, name:str, layout:StructLayout, is_class:bool=False) -> None:
+    def __init__(self, name:str, layout:StructLayout, is_class:bool=False, ghidra_uid:int=-1) -> None:
         self.name = name
         self.layout = layout
         self.is_class = is_class
+        self.ghidra_uid = ghidra_uid
 
     def __eq__(self, other, dtchain:List[str]=None):
         if not isinstance(other, StructDefinition):
@@ -212,19 +213,21 @@ class StructDefinition:
     def to_dict(self) -> dict:
         return {
             'name': self.name,
+            'ghidra_uid': self.ghidra_uid,
             'layout': self.layout.to_dict(),
             'is_class': self.is_class
         }
 
     @staticmethod
     def from_dict(d:dict, sdb) -> 'StructDefinition':
-        return StructDefinition(d['name'], StructLayout.from_dict(d['layout'], sdb), d['is_class'])
+        return StructDefinition(d['name'], StructLayout.from_dict(d['layout'], sdb), d['is_class'], d['ghidra_uid'])
 
 class UnionDefinition:
     '''Union version of StructDefinition'''
-    def __init__(self, name:str, layout:UnionLayout) -> None:
+    def __init__(self, name:str, layout:UnionLayout, ghidra_uid:int=-1) -> None:
         self.name = name
         self.layout = layout
+        self.ghidra_uid = ghidra_uid
 
     def __eq__(self, other, dtchain:List[str]=None):
         if not isinstance(other, UnionDefinition):
@@ -261,9 +264,10 @@ class UnionDefinition:
     def to_dict(self) -> dict:
         return {
             'name': self.name,
+            'ghidra_uid': self.ghidra_uid,
             'layout': self.layout.to_dict(),
         }
 
     @staticmethod
     def from_dict(d:dict, sdb) -> 'UnionDefinition':
-        return UnionDefinition(d['name'], UnionLayout.from_dict(d['layout'], sdb))
+        return UnionDefinition(d['name'], UnionLayout.from_dict(d['layout'], sdb), d['ghidra_uid'])

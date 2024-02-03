@@ -48,7 +48,8 @@ def _stringdt_to_varlib(gdt:StringDataType, length:int, typedef_name:str=None):
     return datatype.ArrayType(datatype.BuiltinType('char', False, True, 1), length)
 
 def _struct_to_varlib(gdt:Structure, length:int, typedef_name:str=None):
-    sid = gdt.universalID.value
+    # WOW...Ghidra uses multiple ids...thanks...
+    sid = gdt.key   # this matches the ids we export from decompiler
     return datatype.StructType(db=None, sid=sid, name=gdt.name)
 
 def _typedef_to_varlib(gdt:TypeDef, length:int, typedef_name:str=None):
@@ -59,7 +60,8 @@ def _undefined_to_varlib(gdt:Undefined, length:int, typedef_name:str=None):
     return datatype.BuiltinType(name, False, False, gdt.length)
 
 def _union_to_varlib(gdt:Union, length:int, typedef_name:str=None):
-    return datatype.UnionType(db=None, sid=gdt.universalID.value, name=gdt.name)
+    sid = gdt.key   # this matches the ids we export from decompiler
+    return datatype.UnionType(db=None, sid=sid, name=gdt.name)
 
 def _void_to_varlib(gdt:VoidDataType, length:int, typedef_name:str=None):
     return datatype.BuiltinType.create_void_type()
