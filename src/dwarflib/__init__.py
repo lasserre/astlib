@@ -446,6 +446,12 @@ class DwarfDebugInfo:
         # don't call _build_lineinfo_lookup() in case we don't need it
 
     @staticmethod
+    def is_PIE_exe_or_sharedobj(elf_file:Path) -> bool:
+        with open(elf_file, 'rb') as f:
+            ef = ELFFile(f)
+            return ef.structs.e_type == 'ET_DYN'
+
+    @staticmethod
     def fromElf(elf_file:Path) -> 'DwarfDebugInfo':
         '''
         Create a new DwarfDebugInfo instance from the path to an ELF executable
