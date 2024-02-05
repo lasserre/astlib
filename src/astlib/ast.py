@@ -1,7 +1,7 @@
 import json
 import sys, inspect
 from pathlib import Path
-from typing import Callable, Any, List, Dict
+from typing import Callable, Any, List, Dict, Tuple
 
 from varlib import StructDatabase
 from varlib.datatype import DataType, datatype_from_dict, EnumType
@@ -37,6 +37,10 @@ class FromDictContext:
     def __init__(self, sdb:StructDatabase, tudecl:'TranslationUnitDecl'=None) -> None:
         self.sdb = sdb
         self.tudecl = tudecl
+        self.pending_dicts:List[Tuple[dict, ASTNode]] = []  # (child_dict, parent_node)
+
+    def has_pending_dicts(self) -> bool:
+        return len(self.pending_dicts) > 0
 
 class ASTNode:
     '''
@@ -99,7 +103,7 @@ class ASTNode:
         '''Helper function for ASTNodes to read in their child nodes'''
         if 'inner' in d:
             for child_dict in d['inner']:
-                self.add_child(astnode_from_dict(child_dict, ctx))
+                ctx.pending_dicts.append((child_dict, self))
 
     def to_dict(self) -> dict:
         '''Converts the data type into a serializable dict'''
@@ -643,7 +647,21 @@ _current_module = sys.modules[__name__]
 _module_classes:dict = _get_module_classes()
 
 def astnode_from_dict(d:dict, ctx:FromDictContext=None) -> ASTNode:
+    # use iterative algorithm because large function ASTs broke my
+    # initial recursive algorithm :)
+    ctx = FromDictContext(sdb=None)
+    root_node = _process_pending_dict(d, ctx)
+
+    while ctx.has_pending_dicts():
+        child_dict, parent_node = ctx.pending_dicts.pop(0)
+        child_node = _process_pending_dict(child_dict, ctx)
+        parent_node.add_child(child_node)
+
+    return root_node
+
+def _process_pending_dict(d:dict, ctx:FromDictContext) -> ASTNode:
     global _module_classes
+
     if d['kind'] not in _module_classes:
         raise NotImplementedError(f'No ASTNode class defined for node type "{d["kind"]}"')
     return _module_classes[d['kind']].from_dict(d, ctx)
@@ -653,6 +671,4 @@ def read_json(json_file:Path) -> ASTNode:
         data = json.load(f)
     # TODO: later, look for a .sdb file in the same folder, read it in and pass the
     # struct database along
-    ctx = FromDictContext(sdb=None)
-    return astnode_from_dict(data, ctx)
-
+    return astnode_from_dict(data)
