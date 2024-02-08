@@ -8,7 +8,6 @@ from varlib.datatype import DataType, datatype_from_dict, EnumType
 from varlib.location import Location, LocationType
 
 from .astvisitor import DatatypePrinter, HasNodeTypesVisitor, GetNodesAtAddr
-from .astviewer import ASTViewer, NodeAttrs
 
 _space_mapping = {
     'register': LocationType.Register,
@@ -72,15 +71,17 @@ class ASTNode:
 
     def render(self, format='pdf', outfolder=None, ast_name:str='',
                 fontname:str='Cascadia Code',
-                format_node:Callable[['ASTNode',NodeAttrs],Any]=None):
+                format_node:Callable[['ASTNode','NodeAttrs'],Any]=None):
         '''
         outfolder: If set, the AST graph rendering will be saved in the desired format
                     within this folder. If outfolder is None, no files will be written
         '''
+        from .astviewer import ASTViewer
         return ASTViewer(format_node).render_ast(self, format, outfolder, ast_name, fontname)
 
-    def dtype_str(self):
-        return DatatypePrinter().to_string(self)
+    # now node.dtype can print itself...
+    # def dtype_str(self):
+    #     return DatatypePrinter().to_string(self)
 
     def has_types(self, node_types:List[str], has_any:bool=True):
         return HasNodeTypesVisitor(node_types, has_any).visit(self)
@@ -646,10 +647,10 @@ def _get_module_classes() -> Dict[str, type]:
 _current_module = sys.modules[__name__]
 _module_classes:dict = _get_module_classes()
 
-def astnode_from_dict(d:dict, ctx:FromDictContext=None) -> ASTNode:
+def astnode_from_dict(d:dict, sdb:StructDatabase=None) -> ASTNode:
     # use iterative algorithm because large function ASTs broke my
     # initial recursive algorithm :)
-    ctx = FromDictContext(sdb=None)
+    ctx = FromDictContext(sdb)
     root_node = _process_pending_dict(d, ctx)
 
     while ctx.has_pending_dicts():
@@ -666,9 +667,15 @@ def _process_pending_dict(d:dict, ctx:FromDictContext) -> ASTNode:
         raise NotImplementedError(f'No ASTNode class defined for node type "{d["kind"]}"')
     return _module_classes[d['kind']].from_dict(d, ctx)
 
-def read_json(json_file:Path) -> ASTNode:
+def read_json(json_file:Path, sdb:StructDatabase=None) -> ASTNode:
     with open(json_file) as f:
-        data = json.load(f)
+        json_str = f.read()
+
     # TODO: later, look for a .sdb file in the same folder, read it in and pass the
-    # struct database along
-    return astnode_from_dict(data)
+    # struct database along (maybe layer above this)
+
+    return read_json_str(json_str, sdb)
+
+def read_json_str(json_str:str, sdb:StructDatabase=None) -> ASTNode:
+    data = json.loads(json_str)
+    return astnode_from_dict(data, sdb)

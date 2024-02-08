@@ -1,3 +1,4 @@
+import json
 from typing import List, Any, Dict
 from rich.console import Console
 
@@ -480,3 +481,7 @@ def datatype_from_dict(d:dict, sdb) -> 'DataType':
     if d['kind'] not in _dt_from_dict_methods:
         raise NotImplementedError(f'DataType kind {d["kind"]} not mapped to a from_dict method')
     return _dt_from_dict_methods[d['kind']](d, sdb)
+
+def datatype_from_json_str(json_str:str, sdb=None):
+    data = json.loads(json_str)
+    return datatype_from_dict(data, sdb)

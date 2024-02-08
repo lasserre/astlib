@@ -4,7 +4,10 @@ import html
 from pathlib import Path
 from typing import Callable, Any
 
+from astlib.ast import ASTNode, Any, Callable
+
 from .astvisitor import VisitAllChildrenByDefaultVisitor
+from .ast import *
 
 _NODE_FMT = '''<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
 <TR><TD><b>{:}</b></TD></TR>
@@ -85,11 +88,14 @@ class ASTViewer(VisitAllChildrenByDefaultVisitor):
     def visit_CallExpr(self, node):
         return NodeAttrs(f'caller @ 0x{node.instr_addr:x}')
 
+    def visit_CharacterLiteral(self, node:CharacterLiteral):
+        return NodeAttrs(f"{node.value}")
+
     def visit_CompoundStmt(self, node):
         return NodeAttrs('')
 
     def visit_CStyleCastExpr(self, node):
-        return NodeAttrs(node.dtype.dtype_str())
+        return NodeAttrs(str(node.dtype))
 
     def visit_DeclRefExpr(self, node):
         return NodeAttrs(f'{node.referencedDecl.name}')
@@ -105,7 +111,7 @@ class ASTViewer(VisitAllChildrenByDefaultVisitor):
         return NodeAttrs('')
 
     def visit_FunctionDecl(self, fdecl:'ASTNode'):
-        return NodeAttrs(f'{fdecl.return_dtype.dtype_str()} {fdecl.name}')
+        return NodeAttrs(f'{fdecl.return_dtype} {fdecl.name}')
 
     def visit_IfStmt(self, node):
         return NodeAttrs('')
@@ -120,7 +126,7 @@ class ASTViewer(VisitAllChildrenByDefaultVisitor):
         return NodeAttrs('')
 
     def visit_ParmVarDecl(self, pvdecl):
-        return NodeAttrs(f'{pvdecl.dtype.dtype_str()} {pvdecl.name}')
+        return NodeAttrs(f'{pvdecl.dtype} {pvdecl.name}')
 
     def visit_ReturnStmt(self, rs):
         return NodeAttrs('')
@@ -135,4 +141,41 @@ class ASTViewer(VisitAllChildrenByDefaultVisitor):
         return NodeAttrs(f'{node.opcode}')
 
     def visit_VarDecl(self, vdecl):
-        return NodeAttrs(f'{vdecl.dtype.dtype_str()} {vdecl.name}')
+        return NodeAttrs(f'{vdecl.dtype} {vdecl.name}')
+
+class VariableGraphViewer(ASTViewer):
+    def __init__(self, vgraph_nodes:List[ASTNode], render_khop:int=-1,
+                format_node:Callable[[ASTNode,NodeAttrs],Any]=None) -> None:
+        '''
+        vgraph_nodes: List of nodes in the variable graph, with node[0] being the
+                      DeclRefExpr node
+        render_khop: If > -1, render the khop neighborhood even if it goes outside
+                     the variable graph (useful for context if format_node highlights
+                     only the vgraph)
+        '''
+        super().__init__(format_node)
+
+        self.vgraph_nodes = vgraph_nodes
+        self.render_khop = render_khop
+
+        # TODO: change the render_ast() implementation to
+        # - assign ids for the khop neighborhood (or just the vgraph nodes otherwise)
+        #       make khop simple:
+        #           for i in range(khop):
+        #               # reach out another hop
+        #                   (collect new parent/child nodes that don't already exist in our list, for all nodes in our list)
+        #                   assign ids to these new ones, add to list
+        #
+        # - render each node in the khop, STARTING FROM DeclRefExpr
+        #
+
+        # TODO: also incorporate these extra edges that don't exist in AST
+        # TODO: color each outgoing edge from target node
+        varname = self.vgraph_nodes[0].referencedDecl.name
+        needs_edge_to_declref = []
+
+        for n in self.vgraph_nodes[1:]:
+            for x in n.inner:
+                if x.kind == 'DeclRefExpr' and x.referencedDecl.name == varname:
+                    needs_edge_to_declref.append(n)
+                    break   # move on to next node in neighborhood
