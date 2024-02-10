@@ -16,19 +16,22 @@ _space_mapping = {
     'unique': LocationType.Unique,
 }
 
-_statement_node_kinds = [
-    'BreakStmt',
+_statement_container_kinds = [
+    'CompoundStmt',
     'CaseStmt',
-    # 'CompoundStmt'    # not really...this is just a container of statements
-    'DeclStmt',
     'DoStmt',
     'ForStmt',
-    'GotoStmt',
     'IfStmt',
+    'WhileStmt',
+]
+
+_statement_node_kinds = [
+    'BreakStmt',
+    'DeclStmt',
+    'GotoStmt',
     'LabelStmt',
     'ReturnStmt',
-    'SwitchStmt',
-    'WhileStmt'
+    'SwitchStmt',   # could go either way with this one, decided to leave here
 ]
 
 class FromDictContext:
@@ -83,6 +86,13 @@ class ASTNode:
     # def dtype_str(self):
     #     return DatatypePrinter().to_string(self)
 
+    def find_root_node(self) -> 'ASTNode':
+        '''Walk up the tree until we find the root node'''
+        root = self
+        while root.parent is not None:
+            root = root.parent
+        return root
+
     def has_types(self, node_types:List[str], has_any:bool=True):
         return HasNodeTypesVisitor(node_types, has_any).visit(self)
 
@@ -91,14 +101,18 @@ class ASTNode:
 
     @property
     def is_statement(self) -> bool:
-        global _statement_node_kinds
+        global _statement_node_kinds, _statement_container_kinds
         # examples:
         # x = y;
         # my_func();
-        # for (i = 0; i < DECLREF; i++)
-        return (self.kind == 'BinaryOperator' and self.opcode == '=') \
-            or (self.kind == 'CallExpr' and self.parent and self.parent.kind == 'CompoundStmt') \
-            or self.kind in _statement_node_kinds
+        # for (i = 0; i < DECLREF; i++)  <-- contains 3 statements (maybe "complete expressions" technically, but this is what we're after)
+
+        return self.kind in _statement_node_kinds or (self.parent and self.parent.kind in _statement_container_kinds)
+
+        # return (self.kind == 'BinaryOperator' and self.opcode == '=') \
+        #     or (self.kind == 'CallExpr' and self.parent and self.parent.kind == 'CompoundStmt') \
+        #     or self.kind in _statement_node_kinds
+
 
     def _children_from_dict(self, d:dict, ctx:FromDictContext):
         '''Helper function for ASTNodes to read in their child nodes'''
