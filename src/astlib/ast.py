@@ -93,6 +93,16 @@ class ASTNode:
             root = root.parent
         return root
 
+    def compute_size(self) -> int:
+        '''Returns the size of the AST rooted at this node in total # of nodes'''
+        node_list = [self]
+        num_nodes = 0
+        while len(node_list):
+            n = node_list.pop()
+            num_nodes += 1
+            node_list.extend(n.inner)
+        return num_nodes
+
     def has_types(self, node_types:List[str], has_any:bool=True):
         return HasNodeTypesVisitor(node_types, has_any).visit(self)
 

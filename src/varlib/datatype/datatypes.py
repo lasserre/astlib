@@ -311,6 +311,14 @@ class ArrayType(DataType):
 
     def __str__(self):
         len_str = self.num_elements if self.num_elements else ''
+        if isinstance(self.element_type, ArrayType):
+            # {self.element_type}[self_dim][child_dim][...]
+            nested = self.element_type
+            dim_sizes = [self.num_elements]     # we want top->bottom going L->R
+            while isinstance(nested, ArrayType):
+                dim_sizes.append(nested.num_elements)
+                nested = nested.element_type
+            return f'{nested}[{"][".join(str(x) for x in dim_sizes)}]'
         return f'{self.element_type}[{len_str}]'
 
     def __eq__(self, other, dtchain:List[str]=None):

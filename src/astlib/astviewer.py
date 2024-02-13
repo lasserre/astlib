@@ -9,9 +9,13 @@ from astlib.ast import ASTNode, Any, Callable
 from .astvisitor import VisitAllChildrenByDefaultVisitor
 from .ast import *
 
-_NODE_FMT = '''<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+_NODE_FMT_2ROWS = '''<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
 <TR><TD><b>{:}</b></TD></TR>
 <TR><TD>{:}</TD></TR>
+</TABLE>>'''
+
+_NODE_FMT_1ROW = '''<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+<TR><TD><b>{:}</b></TD></TR>
 </TABLE>>'''
 
 class NodeAttrs:
@@ -29,11 +33,12 @@ class NodeAttrs:
         self.font_color = font_color
 
 class ASTViewer(VisitAllChildrenByDefaultVisitor):
-    def __init__(self, format_node:Callable[['ASTNode',NodeAttrs],Any]=None) -> None:
+    def __init__(self, format_node:Callable[['ASTNode',NodeAttrs],Any]=None, node_kind_only:bool=False) -> None:
         super().__init__()
         self.g:Graph = None
         self.id_ctr = 0
         self._format_node = format_node
+        self._node_kind_only = node_kind_only
 
     def render_ast(self, node:'ASTNode', format:str, outfolder:Path=None, ast_name:str='',
                    fontname:str='Cascadia Code'):
@@ -86,7 +91,10 @@ class ASTViewer(VisitAllChildrenByDefaultVisitor):
             self.add_edge(node, parent)
 
     def add_node(self, node:ASTNode, attrs:NodeAttrs):
-        label = _NODE_FMT.format(node.kind, html.escape(attrs.node_string))
+        if self._node_kind_only:
+            label = _NODE_FMT_1ROW.format(node.kind)
+        else:
+            label = _NODE_FMT_2ROWS.format(node.kind, html.escape(attrs.node_string))
         self.g.node(node._graph_id, label=label, color=attrs.node_color, fontcolor=attrs.font_color)
 
     def add_edge(self, node:ASTNode, parent:ASTNode, **kwargs):

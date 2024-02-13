@@ -236,6 +236,14 @@ _qualifier_tags = [
     'DW_TAG_restrict_type',
 ]
 
+def _get_array_nelems_from_subrange(srdie:DIE):
+    if srdie.upper_bound and not isinstance(srdie.upper_bound, list):
+        return srdie.upper_bound + 1
+    elif srdie.count:
+        return srdie.count
+    else:
+        return None   # unknown size
+
 def to_varlib_dtype(self:DIE, typedef_name:str='', typename_basic:bool=False):
     if self.type_die is None:
         return BuiltinType.create_void_type()
@@ -257,15 +265,22 @@ def to_varlib_dtype(self:DIE, typedef_name:str='', typename_basic:bool=False):
         is_float, is_signed = getDwarfBaseTypeEncodingAttrs(self.type_die.encoding)
         return BuiltinType(self.type_die.name, is_float, is_signed, self.type_die.byte_size)
     elif self.type_die.tag == 'DW_TAG_array_type':
-        subrange = [x for x in self.type_die.iter_children() if x.tag == 'DW_TAG_subrange_type'][0]
-        if subrange.upper_bound and not isinstance(subrange.upper_bound, list):
-            num_elems = subrange.upper_bound + 1
-        elif subrange.count:
-            num_elems = subrange.count
-        else:
-            num_elems = None   # unknown size
-        arrtype = ArrayType(None, num_elems)
-        arrtype.element_type = to_varlib_dtype(self.type_die, typedef_name, typename_basic)
+        # subrange = [x for x in self.type_die.iter_children() if x.tag == 'DW_TAG_subrange_type'][0]
+        subranges = [x for x in self.type_die.iter_children() if x.tag == 'DW_TAG_subrange_type']
+        arrtype = ArrayType(None, num_elements=1)
+
+        # for multi-dim array - array dim sizes are in L-R order
+        current = arrtype
+        for i, arr_dim in enumerate([_get_array_nelems_from_subrange(sr) for sr in subranges]):
+            current.num_elements = arr_dim
+            if i < len(subranges)-1:
+                current.element_type = ArrayType(None, num_elements=1)
+                current = current.element_type      # point to next layer down
+
+        # overwrite final layer with actual contained type
+        current.element_type = to_varlib_dtype(self.type_die, typedef_name, typename_basic)
+
+        # return top-level type
         return arrtype
     elif self.type_die.tag == 'DW_TAG_union_type':
         name = get_typename(self)
