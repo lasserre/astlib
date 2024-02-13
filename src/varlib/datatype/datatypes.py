@@ -1,3 +1,4 @@
+from itertools import chain
 import json
 from typing import List, Any, Dict
 from rich.console import Console
@@ -109,14 +110,14 @@ class Type(DataType):
     def from_dict(d:dict, sdb) -> 'BuiltinType':
         return Type(d['name'])
 
-_standard_floats_by_size = {
+_builtin_floats_by_size = {
     4: 'float',
     8: 'double',
     10: 'long double',
     # 16: '',
 }
 
-_standard_uints_by_size = {
+_builtin_uints_by_size = {
     1: 'uchar',
     2: 'ushort',
     4: 'uint32',
@@ -124,7 +125,7 @@ _standard_uints_by_size = {
     16: 'uint128',
 }
 
-_standard_ints_by_size = {
+_builtin_ints_by_size = {
     1: 'char',
     2: 'short',
     4: 'int32',
@@ -132,9 +133,16 @@ _standard_ints_by_size = {
     16: 'int128',
 }
 
-_standard_floats_by_name = {nm: sz for sz, nm in _standard_floats_by_size.items()}
-_standard_uints_by_name = {nm: sz for sz, nm in _standard_uints_by_size.items()}
-_standard_ints_by_name = {nm: sz for sz, nm in _standard_ints_by_size.items()}
+_builtin_floats_by_name = {nm: sz for sz, nm in _builtin_floats_by_size.items()}
+_builtin_uints_by_name = {nm: sz for sz, nm in _builtin_uints_by_size.items()}
+_builtin_ints_by_name = {nm: sz for sz, nm in _builtin_ints_by_size.items()}
+
+_builtin_type_names = list(chain(
+    _builtin_floats_by_name.keys(),
+    _builtin_uints_by_name.keys(),
+    _builtin_ints_by_name.keys(),
+    ['void']
+))
 
 class BuiltinType(DataType):
     '''
@@ -150,6 +158,30 @@ class BuiltinType(DataType):
         self.signed = signed
         self._size = size
 
+    @staticmethod
+    def get_std_names() -> List[str]:
+        '''Returns a list of the recognized built-in type names'''
+        global _builtin_type_names
+        return _builtin_type_names.copy()
+
+    @staticmethod
+    def from_standard_name(std_name:str) -> 'BuiltinType':
+        global _builtin_floats_by_name, _builtin_uints_by_name, _builtin_ints_by_name
+
+        if std_name in _builtin_floats_by_name:
+            size = _builtin_floats_by_name[std_name]
+            return BuiltinType(std_name, floating_point=True, signed=True, size=size)
+        elif std_name in _builtin_ints_by_name:
+            size = _builtin_ints_by_name[std_name]
+            return BuiltinType(std_name, floating_point=False, signed=True, size=size)
+        elif std_name in _builtin_uints_by_name:
+            size = _builtin_uints_by_name[std_name]
+            return BuiltinType(std_name, floating_point=False, signed=False, size=size)
+        elif std_name == 'void':
+            return BuiltinType.create_void_type()
+
+        raise Exception(f'{std_name} is not a standard built-in type name')
+
     @property
     def standard_name(self) -> str:
         '''
@@ -162,11 +194,11 @@ class BuiltinType(DataType):
         if self.is_void:
             return 'void'
         if self.floating_point:
-            return _standard_floats_by_size[self.size] if self.size in _standard_floats_by_size else f'UNMAPPED_FLOAT_{self.size}'
+            return _builtin_floats_by_size[self.size] if self.size in _builtin_floats_by_size else f'UNMAPPED_FLOAT_{self.size}'
         elif self.signed:
-            return _standard_ints_by_size[self.size] if self.size in _standard_ints_by_size else f'UNMAPPED_INT_{self.size}'
+            return _builtin_ints_by_size[self.size] if self.size in _builtin_ints_by_size else f'UNMAPPED_INT_{self.size}'
         else:
-            return _standard_uints_by_size[self.size] if self.size in _standard_uints_by_size else f'UNMAPPED_UINT_{self.size}'
+            return _builtin_uints_by_size[self.size] if self.size in _builtin_uints_by_size else f'UNMAPPED_UINT_{self.size}'
 
     @property
     def typename_basic(self) -> str:
@@ -174,6 +206,9 @@ class BuiltinType(DataType):
 
     def __str__(self):
         return self.standard_name
+
+    def __repr__(self) -> str:
+        return str(self)
 
     def __eq__(self, other, dtchain:List[str]=None):
         if not isinstance(other, BuiltinType):
@@ -252,12 +287,30 @@ class PointerType(DataType):
     def typename_basic(self) -> str:
         return f'{self.pointed_to.typename_basic}*'
 
+    @property
+    def is_funcptr_chain(self) -> bool:
+        '''True if this is a chain of 1 or more pointers to a function prototype'''
+        next_type = self.pointed_to
+        while next_type and isinstance(next_type, PointerType):
+            next_type = next_type.pointed_to
+
+        # reached the first non-ptr type. this is a funcptr chain if this type
+        # is a FunctionType
+        return bool(next_type and isinstance(next_type, FunctionType))
+
     def __str__(self):
-        if self.pointed_to.category == DataTypeCategories.Function:
-            # delegate entire string representation to the function prototype
-            # which renders itself like a function pointer
-            return str(self.pointed_to)
-        return f'{self.pointed_to}*'
+        if self.pointed_to:
+            if self.is_funcptr_chain:
+                proto_str = str(self.pointed_to)
+                idx = proto_str.find('(')   # find first open paren, insert our pointer char in the chain
+                prefix = proto_str[:idx+1]
+                suffix = proto_str[idx+1:]
+                return f'{prefix}*{suffix}'
+            return f'{self.pointed_to}*'
+        return '*'
+
+    def __repr__(self) -> str:
+        return str(self)
 
     def __eq__(self, other, dtchain:List[str]=None):
         if not isinstance(other, PointerType):
@@ -309,17 +362,24 @@ class ArrayType(DataType):
         len_str = self.num_elements if self.num_elements else ''
         return f'{self.element_type.typename_basic}[{len_str}]'
 
+    def _get_nelem_str(self, num_elements:int) -> str:
+        return str(num_elements) if num_elements else ''
+
     def __str__(self):
-        len_str = self.num_elements if self.num_elements else ''
         if isinstance(self.element_type, ArrayType):
             # {self.element_type}[self_dim][child_dim][...]
             nested = self.element_type
-            dim_sizes = [self.num_elements]     # we want top->bottom going L->R
+            dim_sizes = [self._get_nelem_str(self.num_elements)]     # we want top->bottom going L->R
             while isinstance(nested, ArrayType):
-                dim_sizes.append(nested.num_elements)
+                dim_sizes.append(self._get_nelem_str(nested.num_elements))
                 nested = nested.element_type
-            return f'{nested}[{"][".join(str(x) for x in dim_sizes)}]'
-        return f'{self.element_type}[{len_str}]'
+            eltype_str = str(nested) if nested else ''
+            return f'{eltype_str}[{"][".join(str(x) for x in dim_sizes)}]'
+        eltype_str = str(self.element_type) if self.element_type else ''
+        return f'{eltype_str}[{self._get_nelem_str(self.num_elements)}]'
+
+    def __repr__(self) -> str:
+        return str(self)
 
     def __eq__(self, other, dtchain:List[str]=None):
         if not isinstance(other, ArrayType):
@@ -366,6 +426,9 @@ class EnumType(DataType):
 
     def __str__(self):
         return self.name
+
+    def __repr__(self) -> str:
+        return str(self)
 
     def __eq__(self, other, dtchain:List[str]=None):
         if not isinstance(other, EnumType):
@@ -422,8 +485,12 @@ class FunctionType(DataType):
         return self.name if self.name else 'FuncProto'
 
     def __str__(self):
-        # assumes function pointer
-        return f'{self.return_dtype} (*)({",".join(str(p) for p in self.params)})'
+        # assumes function pointer, but PointerType parent will add the appropriate # of '*' characters
+        return_type_str = '' if self.return_dtype is None else f'{self.return_dtype} '
+        return f'{return_type_str}({self.name})({",".join(str(p) for p in self.params)})'
+
+    def __repr__(self) -> str:
+        return str(self)
 
     def __eq__(self, other, dtchain:List[str]=None):
         if not isinstance(other, FunctionType):
