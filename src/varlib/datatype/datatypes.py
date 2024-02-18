@@ -198,6 +198,10 @@ class BuiltinType(DataType):
         elif self.signed:
             return _builtin_ints_by_size[self.size] if self.size in _builtin_ints_by_size else f'UNMAPPED_INT_{self.size}'
         else:
+            if self.size in [3, 5, 6, 7]:
+                # round these sizes up to uint32 or uint64 - Ghidra has undefined3/5/6/7 types that aren't in our
+                # type system (and rarely occur...so far I've only seen this for an invalid function)
+                return _builtin_uints_by_size[4] if self.size == 3 else _builtin_uints_by_size[8]
             return _builtin_uints_by_size[self.size] if self.size in _builtin_uints_by_size else f'UNMAPPED_UINT_{self.size}'
 
     @property
