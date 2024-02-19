@@ -1,4 +1,4 @@
-from typing import List, Any, Dict
+from typing import List, Any, Dict, Callable
 from rich.console import Console
 
 class ASTVisitor:
@@ -13,7 +13,7 @@ class ASTVisitor:
                # do stuff here
                return True  # to prevent visiting child nodes
     '''
-    def __init__(self, warn_missing_visits:bool, missing_visit_methods:List[str]=[], default_return_value:Any='') -> None:
+    def __init__(self, warn_missing_visits:bool, missing_visit_methods:List[str]=[], get_default_return_value:Callable[['ASTNode'],Any]='') -> None:
         '''
         warn_missing_visits: If true, log a warning when a node is encountered for which no visit method has been defined
         missing_visit_methods: A list of ASTNode types for which a missing visit method is expected (and no warning
@@ -21,7 +21,7 @@ class ASTVisitor:
         '''
         self.warn_missing_visits = warn_missing_visits
         self.missing_visit_methods = missing_visit_methods
-        self.default_return_value = default_return_value
+        self.get_default_return_value = get_default_return_value
 
     def missing_method_should_be_logged(self, node_kind:str):
         '''
@@ -37,7 +37,7 @@ class ASTVisitor:
             console = Console()
             console.print(f'WARNING: No visit_method defined by {type(self).__name__} for node type {node.kind}', style='bright_yellow')
 
-        return visit_method(node) if visit_method else self.default_return_value
+        return visit_method(node) if visit_method else self.get_default_return_value(node)
 
 class VisitAllChildrenByDefaultVisitor(ASTVisitor):
     '''

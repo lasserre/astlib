@@ -196,6 +196,9 @@ class BuiltinType(DataType):
         if self.floating_point:
             return _builtin_floats_by_size[self.size] if self.size in _builtin_floats_by_size else f'UNMAPPED_FLOAT_{self.size}'
         elif self.signed:
+            if self.size in [3, 5, 6, 7]:
+                # round these sizes up to int32 or int64 - saw this in dataset but not sure what Ghidra mapped it to yet
+                return _builtin_ints_by_size[4] if self.size == 3 else _builtin_ints_by_size[8]
             return _builtin_ints_by_size[self.size] if self.size in _builtin_ints_by_size else f'UNMAPPED_INT_{self.size}'
         else:
             if self.size in [3, 5, 6, 7]:

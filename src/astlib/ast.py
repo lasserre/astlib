@@ -595,6 +595,7 @@ class FunctionDecl(ValueDecl):
         self.address = address
         self.is_intrinsic = is_intrinsic
         self.return_dtype = return_dtype
+        self.dtype = return_dtype   # Represent the FunctionDecl.dtype with its return type
         for p in params:
             self.add_child(p)
 
