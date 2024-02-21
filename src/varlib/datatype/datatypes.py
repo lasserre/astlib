@@ -123,6 +123,11 @@ _builtin_uints_by_size = {
     4: 'uint32',
     8: 'uint64',
     16: 'uint128',
+    # NOTE: these are simply because Ghidra generates them for "functions"
+    # like ZEXT, etc. and for that reason they can show up as temporary var
+    # types (as well as data types for AST nodes in expressions)
+    32: 'uint256',
+    64: 'uint512',
 }
 
 _builtin_ints_by_size = {
@@ -196,16 +201,30 @@ class BuiltinType(DataType):
         if self.floating_point:
             return _builtin_floats_by_size[self.size] if self.size in _builtin_floats_by_size else f'UNMAPPED_FLOAT_{self.size}'
         elif self.signed:
-            if self.size in [3, 5, 6, 7]:
-                # round these sizes up to int32 or int64 - saw this in dataset but not sure what Ghidra mapped it to yet
-                return _builtin_ints_by_size[4] if self.size == 3 else _builtin_ints_by_size[8]
-            return _builtin_ints_by_size[self.size] if self.size in _builtin_ints_by_size else f'UNMAPPED_INT_{self.size}'
+            if self.size not in _builtin_ints_by_size:
+                # same as below...
+                if self.size < 4:
+                    return _builtin_ints_by_size[4]
+                elif self.size < 8:
+                    return _builtin_ints_by_size[8]
+                elif self.size < 16:
+                    return _builtin_ints_by_size[16]
+                else:
+                    return f'UNMAPPED_INT_{self.size}'
+            return _builtin_ints_by_size[self.size]
         else:
-            if self.size in [3, 5, 6, 7]:
-                # round these sizes up to uint32 or uint64 - Ghidra has undefined3/5/6/7 types that aren't in our
-                # type system (and rarely occur...so far I've only seen this for an invalid function)
-                return _builtin_uints_by_size[4] if self.size == 3 else _builtin_uints_by_size[8]
-            return _builtin_uints_by_size[self.size] if self.size in _builtin_uints_by_size else f'UNMAPPED_UINT_{self.size}'
+            if self.size not in _builtin_uints_by_size:
+                # round these sizes up to next largest type - Ghidra has undefined3/5/6/7 types that aren't in our
+                # type system (and rarely occur...so far I've only seen this for an invalid function or non-DWARF vars)
+                if self.size < 4:
+                    return _builtin_uints_by_size[4]
+                elif self.size < 8:
+                    return _builtin_uints_by_size[8]
+                elif self.size < 16:
+                    return _builtin_uints_by_size[16]
+                else:
+                    return f'UNMAPPED_UINT_{self.size}'
+            return _builtin_uints_by_size[self.size]
 
     @property
     def typename_basic(self) -> str:
