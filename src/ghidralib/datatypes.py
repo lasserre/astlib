@@ -125,7 +125,7 @@ def to_varlib_dtype(gdt:DataType, length:int, typedef_name:str=None) -> datatype
     if isinstance(gdt, VoidDataType):
         return _void_to_varlib(gdt, length, typedef_name)
 
-    if isinstance(gdt, WideCharDataType):
+    if isinstance(gdt, WideCharDataType) or isinstance(gdt, WideChar16DataType) or isinstance(gdt, WideChar32DataType):
         name = typedef_name if typedef_name else gdt.name
         return datatype.BuiltinType(name, floating_point=False, signed=False, size=gdt.length)
 
