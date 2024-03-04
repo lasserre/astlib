@@ -701,6 +701,18 @@ def read_json(json_file:Path, sdb:StructDatabase=None) -> ASTNode:
 
     return read_json_str(json_str, sdb)
 
+class JsonRecursionError(Exception):
+    # Error for case when json.loads() is unable to read in a JSON file
+    # due to massive depth (I've seen this be legitimate)
+    def __init__(self) -> None:
+        super().__init__()
+
 def read_json_str(json_str:str, sdb:StructDatabase=None) -> ASTNode:
-    data = json.loads(json_str)
+    try:
+        data = json.loads(json_str)
+    except RecursionError as e:
+        # want to rethrow this as DISTINCT error from possible RecursionError
+        # in astnode_from_dict() call below
+        # (json.loads we can't do anything about...astnode_from_dict we could potentially fix an issue in our code)
+        raise JsonRecursionError() from e
     return astnode_from_dict(data, sdb)
