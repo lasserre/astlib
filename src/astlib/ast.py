@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Callable, Any, List, Dict, Tuple
 
 from varlib import StructDatabase
-from varlib.datatype import DataType, datatype_from_dict, EnumType
+from varlib.datatype import DataType, datatype_from_dict, EnumType, UnionDefinition, StructDefinition
 from varlib.location import Location, LocationType
 
 from .astvisitor import DatatypePrinter, HasNodeTypesVisitor, GetNodesAtAddr
@@ -232,6 +232,9 @@ class DeclRefExpr(ASTNode):
         self.enum_val = -1
         self._tudecl = tudecl
 
+    def __repr__(self):
+        return f'<DeclRef: {self.referencedDecl.name}>'
+
     @property
     def decl_type_str(self) -> str:
         global _decl_types
@@ -417,6 +420,9 @@ class IntegerLiteral(ASTNode):
         self.value = value
         self.dtype = dtype
 
+    def __repr__(self) -> str:
+        return f'<IntegerLiteral: {self.value} (dtype={self.dtype})>'
+
     def to_dict(self) -> dict:
         return {
             **super().to_dict(),
@@ -454,12 +460,45 @@ class MemberExpr(ASTNode):
         self.is_arrow = is_arrow
         self.sdb = sdb
 
+    def __repr__(self) -> str:
+        member_access = '->' if self.is_arrow else '.'
+        return f'{self.inner[0]}{member_access}{self.name} (offset={self.offset:#x}, sid={self.sid})'
+
     @property
-    def parent_struct(self):
+    def dtype(self) -> DataType:
+        if self.parent_struct:
+            return self.parent_struct.layout.fields_by_offset[self.offset].dtype
+        elif self.parent_union:
+            # have to match union field by name
+            return [f for f in self.parent_union.layout.fields if f.name == self.name][0].dtype
+        return None
+
+    @dtype.setter
+    def dtype(self, value):
+        # do nothing - just define this so the base class initializing a value
+        # doesn't break the use of our dtype property
+        pass
+
+    @property
+    def parent_struct(self) -> StructDefinition:
+        '''
+        Structure that this member is defined within, if it is a structure.
+        Returns None if the containing type is a union
+        '''
         if self.sdb:
             if self.sid in self.sdb.structs_by_id:
                 return self.sdb.structs_by_id[self.sid]
-            return self.sdb.unions_by_id[self.sid]
+        return None
+
+    @property
+    def parent_union(self) -> UnionDefinition:
+        '''
+        Union that this member is defined within, if it is a union.
+        Returns None if the containing type is a structure
+        '''
+        if self.sdb:
+            if self.sid in self.sdb.unions_by_id:
+                return self.sdb.unions_by_id[self.sid]
         return None
 
     def to_dict(self) -> dict:
@@ -556,6 +595,9 @@ class VarDecl(ValueDecl):
         self.name = name
         self.dtype = dtype
         self.location = loc
+
+    def __repr__(self):
+        return f'{self.dtype} {self.name} @ {self.location}'
 
     def to_dict(self) -> dict:
         return {

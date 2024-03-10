@@ -21,7 +21,12 @@ class ASTVisitor:
         '''
         self.warn_missing_visits = warn_missing_visits
         self.missing_visit_methods = missing_visit_methods
-        self.get_default_return_value = get_default_return_value
+        self._do_get_default_return_value = get_default_return_value
+
+    def get_default_return_value(self, node:'ASTNode'):
+        if self._do_get_default_return_value:
+            return self._do_get_default_return_value(node)
+        return None
 
     def missing_method_should_be_logged(self, node_kind:str):
         '''
@@ -47,8 +52,12 @@ class VisitAllChildrenByDefaultVisitor(ASTVisitor):
     visit() will return a list of non-None return values gathered from node-specific
     visit methods, which may be used or ignored based on the concrete visitor
     '''
-    def __init__(self) -> None:
+    def __init__(self, return_self:bool=False) -> None:
+        '''
+        return_self: If true, visit() will return the visitor instance instead of the collected return values
+        '''
         super().__init__(warn_missing_visits=False, missing_visit_methods=[])
+        self.return_self = return_self
 
     def visit(self, node):
         return_vals = []
@@ -60,9 +69,11 @@ class VisitAllChildrenByDefaultVisitor(ASTVisitor):
                 return_vals.append(res)
 
         for child in node.inner:
-            return_vals.extend(self.visit(child))
+            res = self.visit(child)
+            if not self.return_self:
+                return_vals.extend(res)
 
-        return return_vals
+        return self if self.return_self else return_vals
 
         # return self._visit_all_children(node)
 
