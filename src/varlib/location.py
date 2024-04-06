@@ -68,6 +68,9 @@ class Location:
         else:
             return f'LocType={self.loc_type},Reg={self.reg_name},Off={self.offset}'
 
+    def __repr__(self) -> str:
+        return str(self)
+
     def to_dict(self) -> dict:
         return {
             'loc_space': self.loc_type,

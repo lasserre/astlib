@@ -156,6 +156,9 @@ class BinaryOperator(ASTNode):
         super().__init__(instr_addr)
         self.opcode = opcode
 
+    def __repr__(self) -> str:
+        return f'BinaryOperator {self.opcode}'
+
     def to_dict(self) -> dict:
         return {
             **super().to_dict(),
@@ -192,6 +195,9 @@ class CStyleCastExpr(ASTNode):
     def __init__(self, dtype:DataType, instr_addr:int = 0):
         super().__init__(instr_addr)
         self.dtype = dtype
+
+    def __repr__(self) -> str:
+        return f'CStyleCastExpr ({self.dtype})'
 
     def to_dict(self) -> dict:
         return {
@@ -664,6 +670,9 @@ class UnaryOperator(ASTNode):
     def __init__(self, opcode:str, instr_addr:int=0):
         super().__init__(instr_addr)
         self.opcode = opcode
+
+    def __repr__(self) -> str:
+        return f'UnaryOperator {self.opcode}'
 
     def to_dict(self) -> dict:
         return {

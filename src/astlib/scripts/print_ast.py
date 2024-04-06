@@ -225,9 +225,9 @@ class PrintASTVisitor(ASTVisitor):
 
     def convert_ast_to_code(self, node:ASTNode) -> str:
         # if node.kind != 'TranslationUnitDecl':
-        if not isinstance(node, TranslationUnitDecl):
-            print(f'ERROR: Top-level element is not a translation unit ({node.kind})')
-            return ''
+        # if not isinstance(node, TranslationUnitDecl):
+        #     print(f'ERROR: Top-level element is not a translation unit ({node.kind})')
+        #     return ''
 
         code = ''
 
@@ -334,7 +334,10 @@ class PrintASTVisitor(ASTVisitor):
         return repr(chr(lit.value))
 
     def visit_CompoundStmt(self, stmt:ASTNode):
-        return ''.join(self.visit(node) for node in stmt.inner)
+        self.push_statement_mode(True)
+        code = ''.join(self.visit(node) for node in stmt.inner)
+        self.pop_statement_mode()
+        return code
 
     def visit_ConstantArrayType(self, arrtype:ASTNode):
         if self._use_ptr_not_array:
@@ -354,7 +357,7 @@ class PrintASTVisitor(ASTVisitor):
     def visit_CStyleCastExpr(self, expr:ASTNode):
         # I think I should be able to call visit() here, but for now I don't have enough
         # types implemented on Ghidra side for this to work...
-        return f'({self.visit(expr.dtype)}){self.visit(expr.inner[0])}'
+        return f'({expr.dtype}){self.visit(expr.inner[0])}'
         # return f'({expr.dtype_name}){self.visit(expr.inner[0])}'
 
     def visit_DeclRefExpr(self, refexpr:ASTNode):
@@ -546,8 +549,8 @@ class PrintASTVisitor(ASTVisitor):
             code += self.visit(label.inner[0])
         return code
 
-    def visit_MemberExpr(self, memexpr:ASTNode):
-        token = '->' if memexpr.isArrow else '.'
+    def visit_MemberExpr(self, memexpr:MemberExpr):
+        token = '->' if memexpr.is_arrow else '.'
         return f'{self.visit(memexpr.inner[0])}{token}{memexpr.name}'
 
     def visit_NullNode(self, node:ASTNode):
