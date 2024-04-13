@@ -66,6 +66,28 @@ class DataType:
         '''Returns the data type sequence as a list of the actual types'''
         raise NotImplementedError(f'type_sequence property not implemented in {self.__class__}')
 
+    @property
+    def leaf_type(self) -> 'DataType':
+        return self.type_sequence[-1]
+
+    @property
+    def primitive_size(self) -> int:
+        '''
+        The data type size that should be predicted by the primitive type
+        recovery model. Specifically return sizes of 0 for all non-primitive types
+        (structs, unions, etc) since we are not predicting a size for non-primitive
+        types in this model
+        '''
+        return 0    # default to 0
+
+    @property
+    def is_floating(self) -> bool:
+        return False    # default to false
+
+    @property
+    def is_signed(self) -> bool:
+        return False    # default to false
+
     def to_dict(self) -> dict:
         '''Converts the data type into a serializable dict'''
         raise NotImplementedError(f'to_dict not implemented in {self.__class__.__name__}')
@@ -162,6 +184,22 @@ class BuiltinType(DataType):
         self.floating_point = floating_point
         self.signed = signed
         self._size = size
+
+    @property
+    def primitive_size(self) -> int:
+        if self._size == 10:
+            return 16
+        elif self._size > 16:
+            return 16
+        return self._size
+
+    @property
+    def is_floating(self) -> bool:
+        return self.floating_point
+
+    @property
+    def is_signed(self) -> bool:
+        return self.signed
 
     @staticmethod
     def get_std_names() -> List[str]:
