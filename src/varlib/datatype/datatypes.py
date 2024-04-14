@@ -66,6 +66,22 @@ class DataType:
         '''Returns the data type sequence as a list of the actual types'''
         raise NotImplementedError(f'type_sequence property not implemented in {self.__class__}')
 
+    def ptr_hierarchy(self, N:int=3) -> List[str]:
+        '''
+        Returns the N-element (fixed-length) pointer hierarchy for this data type
+        as a list of strings, where each element in the list is 'A' (array),
+        'P' (pointer), or 'L' (leaf)
+
+        The hierarchy size (N) represents the maximum number of pointers that
+        can be expressed; this also is equivalent to a type sequence length of N+1
+        (N pointer hierarchy elements + 1 leaf type)
+        '''
+        # grab all but the final (leaf) type and take only the first character of each
+        ptr_list = [x[0] for x in self.type_sequence_str.split(',')[:-1]]
+        # pad to fixed length
+        ptr_list += ['L'] * (N-len(ptr_list))
+        return ptr_list[:N]     # chop off at the first N elements
+
     @property
     def leaf_type(self) -> 'DataType':
         return self.type_sequence[-1]
@@ -187,11 +203,19 @@ class BuiltinType(DataType):
 
     @property
     def primitive_size(self) -> int:
-        if self._size == 10:
+        # valid sizes are: 0, 1, 2, 4, 8, 16
+        # (long doubles are encoded with a "size" of 16)
+        # --> round up to next valid size
+
+        # check for valid sizes first since this should be vast majority
+        if self._size in [0, 1, 2, 4, 8, 16]:
+            return self._size
+        elif self._size == 3:
+            return 4
+        elif self._size > 4 and self._size < 8:
+            return 8
+        else:
             return 16
-        elif self._size > 16:
-            return 16
-        return self._size
 
     @property
     def is_floating(self) -> bool:
