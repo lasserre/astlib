@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Callable, Any, List, Dict, Tuple
 
 from varlib import StructDatabase
-from varlib.datatype import DataType, datatype_from_dict, EnumType, UnionDefinition, StructDefinition
+from varlib.datatype import DataType, EnumType, UnionDefinition, StructDefinition
 from varlib.location import Location, LocationType
 
 from .astvisitor import DatatypePrinter, HasNodeTypesVisitor, GetNodesAtAddr
@@ -207,7 +207,7 @@ class CStyleCastExpr(ASTNode):
 
     @staticmethod
     def from_dict(d:dict, ctx:FromDictContext) -> 'CStyleCastExpr':
-        cc = CStyleCastExpr(datatype_from_dict(d['dtype'], ctx.sdb), d['instr_addr'])
+        cc = CStyleCastExpr(DataType.from_dict(d['dtype'], ctx.sdb), d['instr_addr'])
         cc._children_from_dict(d, ctx)
         return cc
 
@@ -319,7 +319,7 @@ class CharacterLiteral(ASTNode):
 
     @staticmethod
     def from_dict(d:dict, ctx:FromDictContext) -> 'CharacterLiteral':
-        return CharacterLiteral(d['value'], datatype_from_dict(d['dtype'], ctx.sdb), d['instr_addr'])
+        return CharacterLiteral(d['value'], DataType.from_dict(d['dtype'], ctx.sdb), d['instr_addr'])
 
 class CaseStmt(ASTNode):
     def __init__(self):
@@ -379,7 +379,7 @@ class FloatingLiteral(ASTNode):
     @staticmethod
     def from_dict(d:dict, ctx:FromDictContext) -> 'FloatingLiteral':
         fl = FloatingLiteral(d['value'], d['special_value'],
-            datatype_from_dict(d['dtype'], ctx.sdb), d['instr_addr'])
+            DataType.from_dict(d['dtype'], ctx.sdb), d['instr_addr'])
         fl._children_from_dict(d, ctx)
         return fl
 
@@ -438,7 +438,7 @@ class IntegerLiteral(ASTNode):
 
     @staticmethod
     def from_dict(d:dict, ctx:FromDictContext) -> 'IntegerLiteral':
-        return IntegerLiteral(d['value'], datatype_from_dict(d['dtype'], ctx.sdb), d['instr_addr'])
+        return IntegerLiteral(d['value'], DataType.from_dict(d['dtype'], ctx.sdb), d['instr_addr'])
 
 class LabelStmt(ASTNode):
     def __init__(self, name:str, instr_addr:int=0):
@@ -616,7 +616,7 @@ class VarDecl(ValueDecl):
     @staticmethod
     def from_dict(d:dict, ctx:FromDictContext) -> 'VarDecl':
         vd = VarDecl(d['id'], d['name'],
-                        datatype_from_dict(d['dtype'], ctx.sdb),
+                        DataType.from_dict(d['dtype'], ctx.sdb),
                         Location.from_dict(d))
         ctx.tudecl._decls_by_id[vd.id] = vd
         vd._children_from_dict(d, ctx)
@@ -660,7 +660,7 @@ class FunctionDecl(ValueDecl):
     def from_dict(d:dict, ctx:FromDictContext) -> 'FunctionDecl':
         fd = FunctionDecl(d['id'], d['name'], d['address'],
             d['is_intrinsic'],
-            datatype_from_dict(d['return_dtype'], ctx.sdb),
+            DataType.from_dict(d['return_dtype'], ctx.sdb),
             params=[])
         ctx.tudecl._decls_by_id[fd.id] = fd
         fd._children_from_dict(d, ctx)  # read params from inner

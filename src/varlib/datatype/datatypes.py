@@ -22,12 +22,25 @@ class DataTypeCategories:
                 DataTypeCategories.Enum,
                 DataTypeCategories.Function]
 
+_dt_from_dict_methods = {}  # this is filled in below
+
 class DataType:
     '''
     Abstract base DataType class
     '''
     def __init__(self, category:str) -> None:
         self._category = category   # readonly
+
+    @staticmethod
+    def from_dict(d:dict, sdb) -> 'DataType':
+        if d['kind'] not in _dt_from_dict_methods:
+            raise NotImplementedError(f'DataType kind {d["kind"]} not mapped to a from_dict method')
+        return _dt_from_dict_methods[d['kind']](d, sdb)
+
+    @staticmethod
+    def from_json(json_str:str, sdb=None) -> 'DataType':
+        data = json.loads(json_str)
+        return DataType.from_dict(data, sdb)
 
     @property
     def category(self) -> str:
@@ -418,7 +431,7 @@ class PointerType(DataType):
 
     @staticmethod
     def from_dict(d:dict, sdb) -> 'PointerType':
-        return PointerType(datatype_from_dict(d['inner'][0], sdb), d['size'])
+        return PointerType(DataType.from_dict(d['inner'][0], sdb), d['size'])
 
 class ArrayType(DataType):
     '''
@@ -488,7 +501,7 @@ class ArrayType(DataType):
 
     @staticmethod
     def from_dict(d:dict, sdb) -> 'ArrayType':
-        return ArrayType(datatype_from_dict(d['inner'][0], sdb), d['nelem'])
+        return ArrayType(DataType.from_dict(d['inner'][0], sdb), d['nelem'])
 
 class EnumType(DataType):
     def __init__(self, name:str, dt_size:int=4) -> None:
@@ -626,25 +639,15 @@ class FunctionType(DataType):
 
     @staticmethod
     def from_dict(d:dict, sdb) -> 'FunctionType':
-        return FunctionType(datatype_from_dict(d['rdtype'], sdb),
-                [datatype_from_dict(pdict, sdb) for pdict in d['inner']],
+        return FunctionType(DataType.from_dict(d['rdtype'], sdb),
+                [DataType.from_dict(pdict, sdb) for pdict in d['inner']],
                 d['name']
             )
 
-_dt_from_dict_methods = {
-    'ArrayType': ArrayType.from_dict,
-    'BuiltinType': BuiltinType.from_dict,
-    'EnumType': EnumType.from_dict,
-    'FunctionType': FunctionType.from_dict,
-    'PointerType': PointerType.from_dict,
-    'Type': Type.from_dict,
-}
-
-def datatype_from_dict(d:dict, sdb) -> 'DataType':
-    if d['kind'] not in _dt_from_dict_methods:
-        raise NotImplementedError(f'DataType kind {d["kind"]} not mapped to a from_dict method')
-    return _dt_from_dict_methods[d['kind']](d, sdb)
-
-def datatype_from_json_str(json_str:str, sdb=None):
-    data = json.loads(json_str)
-    return datatype_from_dict(data, sdb)
+# fill this in now that these types are defined
+_dt_from_dict_methods['ArrayType'] = ArrayType.from_dict
+_dt_from_dict_methods['BuiltinType'] = BuiltinType.from_dict
+_dt_from_dict_methods['EnumType'] = EnumType.from_dict
+_dt_from_dict_methods['FunctionType'] = FunctionType.from_dict
+_dt_from_dict_methods['PointerType'] = PointerType.from_dict
+_dt_from_dict_methods['Type'] = Type.from_dict

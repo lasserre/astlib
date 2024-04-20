@@ -1,6 +1,6 @@
 from typing import Dict, List, Set
 
-from .datatypes import datatype_from_dict, DataType
+from .datatypes import DataType
 
 class StructField:
     '''
@@ -40,7 +40,7 @@ class StructField:
 
     @staticmethod
     def from_dict(d:dict, sdb) -> 'StructField':
-        return StructField(datatype_from_dict(d['dtype'], sdb), d['name'])
+        return StructField(DataType.from_dict(d['dtype'], sdb), d['name'])
 
 class StructLayout:
     '''
