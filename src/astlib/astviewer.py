@@ -98,7 +98,7 @@ class ASTViewer(VisitAllChildrenByDefaultVisitor):
         self.g.node(node._graph_id, label=label, color=attrs.node_color, fontcolor=attrs.font_color)
 
     def add_edge(self, node:ASTNode, parent:ASTNode, **kwargs):
-        self.g.edge(node._graph_id, parent._graph_id, **kwargs)
+        self.g.edge(node._graph_id, parent._graph_id, arrowhead='normal', dir='forward', **kwargs)
 
     @staticmethod
     def is_render_node(node:ASTNode) -> bool:
