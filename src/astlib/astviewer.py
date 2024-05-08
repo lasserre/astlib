@@ -159,6 +159,9 @@ class ASTViewer(VisitAllChildrenByDefaultVisitor):
     def visit_ReturnStmt(self, rs):
         return NodeAttrs('')
 
+    def visit_StringLiteral(self, slit:StringLiteral):
+        return NodeAttrs(slit.value)
+
     def visit_TranslationUnitDecl(self, tudecl):
         return NodeAttrs('')
 
