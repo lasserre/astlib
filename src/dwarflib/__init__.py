@@ -7,6 +7,7 @@ from elftools.dwarf.dwarfinfo import DWARFInfo, CompileUnit
 from elftools.dwarf.die import DIE
 from elftools.dwarf.descriptions import ExprDumper, describe_DWARF_expr
 from elftools.dwarf.locationlists import *
+from elftools.dwarf import constants
 
 from pathlib import Path
 import re
@@ -207,6 +208,7 @@ def unionDIE_to_varlib(udie:DIE, name:str):
 _basetype_encoding_to_tuple = {
     # value: (isFloating, isSigned)
     2: (False, False),  # DW_ATE_boolean
+    3: (True, True),    # DW_ATE_complex_float
     4: (True, True),    # DW_ATE_float
     5: (False, True),   # DW_ATE_signed
     6: (False, True),   # DW_ATE_signed_char
@@ -404,6 +406,7 @@ DIE.artificial = die_property('DW_AT_artificial', None)
 DIE.upper_bound = die_property('DW_AT_upper_bound', None)
 DIE.count = die_property('DW_AT_count', None)
 DIE.inline = die_property('DW_AT_inline', None)
+DIE.language = die_property('DW_AT_language', None)
 
 # CLS: taken from dwarf_lineprogram_filenames.py example in pyelftools
 def line_entry_mapping(line_program):
@@ -448,6 +451,55 @@ def lpe_filename(line_program, file_index):
 
     directory = lp_header["include_directory"][dir_index - 1]
     return posixpath.join(directory, file_entry.name).decode()
+
+_LANG_TO_NAME = {
+    constants.DW_LANG_C89: 'C89',
+    constants.DW_LANG_C: 'C',
+    constants.DW_LANG_Ada83: 'Ada83',
+    constants.DW_LANG_C_plus_plus: 'C_plus_plus',
+    constants.DW_LANG_Cobol74: 'Cobol74',
+    constants.DW_LANG_Cobol85: 'Cobol85',
+    constants.DW_LANG_Fortran77: 'Fortran77',
+    constants.DW_LANG_Fortran90: 'Fortran90',
+    constants.DW_LANG_Pascal83: 'Pascal83',
+    constants.DW_LANG_Modula2: 'Modula2',
+    constants.DW_LANG_Java: 'Java',
+    constants.DW_LANG_C99: 'C99',
+    constants.DW_LANG_Ada95: 'Ada95',
+    constants.DW_LANG_Fortran95: 'Fortran95',
+    constants.DW_LANG_PLI: 'PLI',
+    constants.DW_LANG_ObjC: 'ObjC',
+    constants.DW_LANG_ObjC_plus_plus: 'ObjC_plus_plus',
+    constants.DW_LANG_UPC: 'UPC',
+    constants.DW_LANG_D: 'D',
+    constants.DW_LANG_Python: 'Python',
+    constants.DW_LANG_OpenCL: 'OpenCL',
+    constants.DW_LANG_Go: 'Go',
+    constants.DW_LANG_Modula3: 'Modula3',
+    constants.DW_LANG_Haskell: 'Haskell',
+    constants.DW_LANG_C_plus_plus_03: 'C_plus_plus_03',
+    constants.DW_LANG_C_plus_plus_11: 'C_plus_plus_11',
+    constants.DW_LANG_OCaml: 'OCaml',
+    constants.DW_LANG_Rust: 'Rust',
+    constants.DW_LANG_C11: 'C11',
+    constants.DW_LANG_Swift: 'Swift',
+    constants.DW_LANG_Julia: 'Julia',
+    constants.DW_LANG_Dylan: 'Dylan',
+    constants.DW_LANG_C_plus_plus_14: 'C_plus_plus_14',
+    constants.DW_LANG_Fortran03: 'Fortran03',
+    constants.DW_LANG_Fortran08: 'Fortran08',
+    constants.DW_LANG_RenderScript: 'RenderScript',
+    constants.DW_LANG_BLISS: 'BLISS',
+    constants.DW_LANG_Mips_Assembler: 'Mips_Assembler',
+    constants.DW_LANG_Upc: 'Upc',
+    constants.DW_LANG_HP_Bliss: 'HP_Bliss',
+    constants.DW_LANG_HP_Basic91: 'HP_Basic91',
+    constants.DW_LANG_HP_Pascal91: 'HP_Pascal91',
+    constants.DW_LANG_HP_IMacro: 'HP_IMacro',
+    constants.DW_LANG_HP_Assembler: 'HP_Assembler',
+    constants.DW_LANG_GOOGLE_RenderScript: 'GOOGLE_RenderScript',
+    constants.DW_LANG_BORLAND_Delphi: 'BORLAND_Delphi',
+}
 
 class DwarfDebugInfo:
     def __init__(self, dwarf:DWARFInfo) -> None:
@@ -518,9 +570,32 @@ class DwarfDebugInfo:
         '''
         If cu_list is None then all cu's will be included
         '''
+        global _LANG_TO_NAME
+
         if not cu_list:
             cu_list = list(self.dwarf.iter_CUs())
-        return [die for cu in cu_list for die in cu.get_top_DIE().iter_children() if die.tag == 'DW_TAG_subprogram']
+
+        # CLS: only allow C/C++ right now (this can become a parameter if needed, but
+        # I always want this for now)
+        lang_list = [
+            constants.DW_LANG_C,
+            constants.DW_LANG_C89,
+            constants.DW_LANG_C99,
+            constants.DW_LANG_C11,
+            constants.DW_LANG_C_plus_plus,
+            constants.DW_LANG_C_plus_plus_03,
+            constants.DW_LANG_C_plus_plus_11,
+            constants.DW_LANG_C_plus_plus_14,
+        ]
+
+        filtered_cu_list = [cu for cu in cu_list if cu.get_top_DIE().language in lang_list]
+
+        if len(filtered_cu_list) < len(cu_list):
+            skipped_langs = [cu.get_top_DIE().language for cu in cu_list if cu not in filtered_cu_list]
+            for lang in sorted(set(skipped_langs)):
+                print(f'Skipping CU\'s written in {_LANG_TO_NAME[lang]}')
+
+        return [die for cu in filtered_cu_list for die in cu.get_top_DIE().iter_children() if die.tag == 'DW_TAG_subprogram']
 
     def get_function_params(self, func:DIE):
         # TODO: implement a function to convert AST to graph (see Jupyter nb)
