@@ -57,9 +57,13 @@ ghidra_data_type_by_caleb_data_type = {
 }
 
 class GhidraRetyper:
-    def __init__(self, program:Program, reference_db:StructDatabase) -> None:
-        # Save appropriate context information
+    def __init__(self, program:Program, reference_db:StructDatabase,
+            decomp_timeout_sec:int=240) -> None:
+
         self.program = program
+        self.reference_db = reference_db
+        self.decomp_timeout_sec = decomp_timeout_sec
+
         self.function_manager = program.getFunctionManager()
         self.data_type_manager = program.getDataTypeManager()
 
@@ -68,9 +72,6 @@ class GhidraRetyper:
         self.decomp_interface = DecompInterface()
         self.decomp_interface.setOptions(options)
         self.decomp_interface.openProgram(self.program)   # TODO: Error handling
-
-        # Import composite data type database
-        self.reference_db = reference_db
 
         # Define data type Category Paths
         self.struct_category_path = CategoryPath('/GhidraRetyper/Structs')
@@ -287,10 +288,14 @@ class GhidraRetyper:
 
     def _get_symbol_map(self, func:Function):
         # Decompile function and get high symbols
-        res = self.decomp_interface.decompileFunction(func, 60, None)
+        res = self.decomp_interface.decompileFunction(func, self.decomp_timeout_sec, None)
         high_func = res.getHighFunction()
-        if high_func == None:
-            raise Exception(f"ERROR: could not decompile {func.name}")
+
+        if res.timedOut:
+            raise Exception(f'Error: decompilation timed out for {func.name} (timeout={self.decomp_timeout_sec})')
+        if high_func is None:
+            raise Exception(f'Error: could not decompile {func.name} ({res.errorMessage})')
+
         local_symbol_map = high_func.getLocalSymbolMap()
         # Convert high symbols to name map
         return local_symbol_map.getNameToSymbolMap()

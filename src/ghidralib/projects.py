@@ -7,6 +7,7 @@ import ghidra
 from ghidra.base.project import GhidraProject
 from ghidra.framework.model import ProjectLocator, DomainFile
 from ghidra.framework.data import DefaultCheckinHandler
+from ghidra.program.model.listing import Program
 
 from pathlib import Path
 import uuid
@@ -31,17 +32,20 @@ def locate_ghidra_binary(proj:GhidraProject, run_name:str, binid:int, debug_bina
     binary id, and selecting either the debug or stripped version as appropriate
     '''
     root_folder = proj.getRootFolder()
+    proj_name = proj.project.repository.name
 
     matching_folders = [x for x in root_folder.getFolders() if run_name in str(x)]
     if not matching_folders:
-        raise Exception(f'No matching run folder found for {run_name} in {reponame}')
+        raise Exception(f'No matching run folder found for {run_name} in {proj_name}')
     elif len(matching_folders) > 1:
-        raise Exception(f'Multiple possible matching folders for {run_name} in {reponame}')
+        raise Exception(f'Multiple possible matching folders for {run_name} in {proj_name}')
 
     run_folder = matching_folders[0]
 
     matching_binaries = [x for x in run_folder.getFiles() if str(x.name).startswith(f'{binid}.')]
-    matching_debug = [x for x in matching_binaries if str(x.name).endswith('.debug')]
+    # NOTE - had to add the last condition for the edge case (that I have) where a binary
+    # is actually named "debug" lol
+    matching_debug = [x for x in matching_binaries if str(x.name).endswith('.debug') and str(x.name) != f'{binid}.debug']
     matching_stripped = [x for x in matching_binaries if x not in matching_debug]
 
     # print(f'Matching debug bins: {matching_debug}')
@@ -49,9 +53,9 @@ def locate_ghidra_binary(proj:GhidraProject, run_name:str, binid:int, debug_bina
 
     matches = matching_debug if debug_binary else matching_stripped
     if not matches:
-        raise Exception(f'No binaries matching binary id {binid} in {run_name} in {reponame}')
+        raise Exception(f'No binaries matching binary id {binid} in {run_name} in {proj_name}')
     elif len(matches) > 1:
-        raise Exception(f'Multiple file matches for binary id {binid} in {run_name} in {reponame}')
+        raise Exception(f'Multiple file matches for binary id {binid} in {run_name} in {proj_name}')
 
     # bin_file = root_folder.getFolder('run1.x64-gcc-O0.astera').getFile('6.fighter')
     bin_file = matches[0]
@@ -93,25 +97,34 @@ class OpenSharedGhidraProject:
         self.shared_proj_dir.with_suffix('.gpr').unlink(missing_ok=True)
         self.repoAdapter.disconnect()
 
-class GhidraCheckout:
+class GhidraCheckoutProgram:
     '''
     Checks out the given file during __enter__ and checks in any changes on exit
     '''
-    def __init__(self, proj:GhidraProject, domain_file:DomainFile, exclusive:bool=False,
+    def __init__(self, proj:GhidraProject, domain_file:DomainFile, read_only:bool=False, exclusive:bool=False,
                 task_monitor=None) -> None:
         self.proj = proj
         self.domain_file = domain_file
+        self.read_only = read_only
         self.exclusive = exclusive
         self.monitor = task_monitor
         self.checkin_msg = ''   # client code should set this inside the with block to set their commit msg
+        self.program:Program = None
 
-    def __enter__(self):
+    def __enter__(self) -> 'GhidraCheckoutProgram':
         success = self.domain_file.checkout(self.exclusive, self.monitor)
         if not success:
             raise Exception(f'Unable to checkout domain file {self.domain_file}')
+
+        self.program = self.proj.openProgram(self.domain_file.parent.pathname, self.domain_file.name, self.read_only)
+
         return self
 
     def __exit__(self, etype, value, traceback):
+        # NOTE: saving only happens explicitly by client code
+        if not self.program.closed:
+            self.proj.close(self.program)
+
         if self.domain_file.changed:
             print(f'Changes to {self.domain_file} detected - checking in')
             self.domain_file.checkin(DefaultCheckinHandler(self.checkin_msg, False, False), True, None)
