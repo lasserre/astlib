@@ -27,7 +27,7 @@ def decompile_all(export_folder:Path, host:str, repo:str, folder:str, binaryName
     from ghidra.app.decompiler import DecompInterface, DecompileOptions
     from ghidra.program.database import ProgramDB
 
-    from ghidralib.opensharedghidraproject import OpenSharedGhidraProject
+    from ghidralib.projects import OpenSharedGhidraProject
     from ghidralib.decompiler import get_decompiler_interface
     from ghidralib.export_types import export_ghidra_types_to_sdb
 
@@ -73,7 +73,6 @@ def decompile_all(export_folder:Path, host:str, repo:str, folder:str, binaryName
 
     return 0
 
-# TODO: make this an entry point, call it!
 def decompile_all_main():
     p = argparse.ArgumentParser(description='Decompile all functions in a binary')
     p.add_argument('export_folder', help='Folder where outputs will be written (failed decomps)')
@@ -139,6 +138,10 @@ def do_export_asts(run:Run, params:Dict[str,Any], outputs:Dict[str,Any]):
             # move sdb files up to the data folder
             for sdb_file in ast_folder.glob('*.sdb'):
                 shutil.move(sdb_file, fb.data_folder/sdb_file.name)
+
+# TODO:
+# - move this to ghidralib.wildebeest.export_asts -> RunStep
+# - leave export_ast.export_asts as a python interface we can call from dragon-ryder
 
 def export_asts(debug:bool):
     params = {
