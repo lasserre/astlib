@@ -185,9 +185,9 @@ class GhidraRetyper:
         # Update data type
         ghidra_dtype = self.convert_dtype(dtype)
         # Skip when the field's data type is undefined (should only be enums now)
-        if ghidra_dtype == None:
-            print(f'WARNING: {symbol.getName()} not updated')
-            return
+        if not ghidra_dtype:
+            raise Exception(f'Error: {symbol.getName()} not updated')
+
         # This function throws an exception when attempting to update type of unique variable with different size
         HighFunctionDBUtil.updateDBVariable(symbol, None, ghidra_dtype, SourceType.USER_DEFINED)
 
@@ -286,7 +286,7 @@ class GhidraRetyper:
         func_addr = self.program.getAddressFactory().getDefaultAddressSpace().getAddress(func_addr)
         return self.function_manager.getFunctionAt(func_addr)
 
-    def _get_symbol_map(self, func:Function):
+    def _get_symbol_map(self, func:Function) -> Dict[str, HighSymbol]:
         # Decompile function and get high symbols
         res = self.decomp_interface.decompileFunction(func, self.decomp_timeout_sec, None)
         high_func = res.getHighFunction()
@@ -298,4 +298,4 @@ class GhidraRetyper:
 
         local_symbol_map = high_func.getLocalSymbolMap()
         # Convert high symbols to name map
-        return local_symbol_map.getNameToSymbolMap()
+        return dict(local_symbol_map.getNameToSymbolMap())
