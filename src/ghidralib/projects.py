@@ -12,6 +12,7 @@ from ghidra.program.model.listing import Program
 from pathlib import Path
 import uuid
 import shutil
+from typing import List
 
 def get_project_manager_headless() -> ghidra.framework.project.DefaultProjectManager:
     '''
@@ -25,6 +26,26 @@ def get_project_manager_headless() -> ghidra.framework.project.DefaultProjectMan
     proj_manager = tmp_proj.projectManager
     tmp_proj.close()
     return proj_manager
+
+def get_all_files_in_project(proj:GhidraProject, no_debug:bool=False) -> List[DomainFile]:
+    '''
+    Collect a list of all files in this project
+    '''
+    folders = [proj.rootFolder]
+    all_files = []
+
+    # if str(f.name).endswith('.debug') and '.' in str(f.name)[:-6]:
+
+    while folders:
+        f = folders.pop()
+        all_files.extend(f.files)
+        folders.extend(f.folders)
+
+    if no_debug:
+        debug_files = [f for f in all_files if str(f.name).endswith('.debug') and '.' in str(f.name)[:-6]]
+        return [f for f in all_files if f not in debug_files]
+
+    return all_files
 
 def locate_ghidra_binary(proj:GhidraProject, run_name:str, binid:int, debug_binary:bool) -> DomainFile:
     '''
