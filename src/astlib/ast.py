@@ -1,3 +1,4 @@
+import itertools
 import json
 import sys, inspect
 from pathlib import Path
@@ -108,6 +109,13 @@ class ASTNode:
 
     def nodes_at_addr(self, addr:int) -> List['ASTNode']:
         return GetNodesAtAddr(addr).visit(self)
+
+    def get_fdecl(self) -> 'FunctionDecl':
+        '''Locate the FunctionDecl for this function AST'''
+        root = self.find_root_node()
+        if root.kind != 'TranslationUnitDecl':
+            return None
+        return root.inner[-1]   # fdecl is last child of tudecl
 
     @property
     def is_statement(self) -> bool:
@@ -646,6 +654,26 @@ class FunctionDecl(ValueDecl):
         self.dtype = return_dtype   # Represent the FunctionDecl.dtype with its return type
         for p in params:
             self.add_child(p)
+
+    @property
+    def func_body(self) -> 'ASTNode':
+        '''Returns the function body'''
+        return self.inner[-1]
+
+    @property
+    def params(self) -> List[ParmVarDecl]:
+        '''Returns the function parameters'''
+        return self.inner[:-1]
+
+    @property
+    def local_decls(self) -> List['DeclStmt']:
+        '''Locate the local variable DeclStmts for this function AST'''
+        return list(itertools.takewhile(lambda node: node.kind == 'DeclStmt', self.func_body.inner))
+
+    @property
+    def local_vars(self) -> List['VarDecl']:
+        '''Locate the local variables for this function AST'''
+        return [decl_stmt.inner[0] for decl_stmt in self.local_decls]
 
     def to_dict(self) -> dict:
         return {
