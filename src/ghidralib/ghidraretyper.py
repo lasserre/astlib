@@ -20,7 +20,7 @@ from ghidra.program.model.data import StructureDataType
 from ghidra.program.model.data import UnionDataType
 from ghidra.program.model.data import PointerDataType
 from ghidra.program.model.data import ArrayDataType
-from ghidra.program.model.data import DataTypeManager
+from ghidra.program.model.data import DataTypeManager, ProgramBasedDataTypeManager
 from ghidra.program.model.data import CategoryPath
 from ghidra.program.model.data import BuiltInDataTypeManager
 from ghidra.program.model.data import DataTypeConflictHandler
@@ -57,26 +57,19 @@ ghidra_data_type_by_caleb_data_type = {
 }
 
 class GhidraRetyper:
-    def __init__(self, program:Program, reference_db:StructDatabase,
-            decomp_timeout_sec:int=240) -> None:
+    def __init__(self, program:Program, sdb:StructDatabase) -> None:
 
         self.program = program
-        self.reference_db = reference_db
-        self.decomp_timeout_sec = decomp_timeout_sec
-
-        self.function_manager = program.getFunctionManager()
-        self.data_type_manager = program.getDataTypeManager()
-
-        # Setup Decompiler Interface
-        options = DecompileOptions()
-        self.decomp_interface = DecompInterface()
-        self.decomp_interface.setOptions(options)
-        self.decomp_interface.openProgram(self.program)   # TODO: Error handling
+        self.sdb = sdb
 
         # Define data type Category Paths
         self.struct_category_path = CategoryPath('/GhidraRetyper/Structs')
         self.union_category_path = CategoryPath('/GhidraRetyper/Unions')
         self.func_category_path = CategoryPath('/GhidraRetyper/Funcs')
+
+    def dtype_mgr(self) -> ProgramBasedDataTypeManager:
+        '''Returns a handle to the data type manager'''
+        return self.program.getDataTypeManager()
 
     def is_conflict(self, sid, comps):
         # Identify explicit conflict definitions
@@ -99,8 +92,8 @@ class GhidraRetyper:
     # TODO: this is a long function, need to break it up
     def define_all_reference_types(self, overwrite_existing:bool=False):
         # Get list of structs and unions by sid for composite type identification
-        structs = self.reference_db.structs_by_id
-        unions = self.reference_db.unions_by_id
+        structs = self.sdb.structs_by_id
+        unions = self.sdb.unions_by_id
         # Check for conflicts
         if self.check_conflicts(structs, unions) == True:
             raise Exception('ERROR: multiple definitions for the same composite')
@@ -138,17 +131,20 @@ class GhidraRetyper:
         else:
             conflict_resolution_policy = DataTypeConflictHandler.KEEP_HANDLER
         # Add data type to dtm with appropriate conflict resolutin set
-        self.data_type_manager.addDataType(dtype, conflict_resolution_policy)
+        self.dtype_mgr.addDataType(dtype, conflict_resolution_policy)
 
     # TODO: struct and union definitions are very similar
     # Could probably figure out how to shrink these functions down with some common helper functions
     def define_struct_type(self, stype:datatype.StructType, overwrite_existing:bool=False):
         # Get empty struct from data type manager
         ghidra_dtype_path = f'{self.struct_category_path}/{stype.name}'
-        new_struct = self.data_type_manager.getDataType(ghidra_dtype_path)
+        new_struct = self.dtype_mgr.getDataType(ghidra_dtype_path)
+
+        # TODO: fix this - dict items() is not guaranteed to be sorted
         # Sort fields by offset to ensure correct generation of structure internals
         fields = stype.layout.fields_by_offset.items()
         fields = dict(sorted(fields)).items()
+
         # Iterate through all fields in dtype structure layout and insert field at correct byte offset
         for offset, details in fields:
             dtype = self.convert_dtype(details.dtype)
@@ -166,7 +162,7 @@ class GhidraRetyper:
     def define_union_type(self, utype:datatype.UnionType, overwrite_existing:bool=False):
         # Get empty union from data type manager
         ghidra_dtype_path = f'{self.union_category_path}/{utype.name}'
-        new_union = self.data_type_manager.getDataType(ghidra_dtype_path)
+        new_union = self.dtype_mgr.getDataType(ghidra_dtype_path)
         # Iterate through all fields in union dtype composite and add to empty union
         for details in utype.layout.fields[0]:
             dtype = self.convert_dtype(details.dtype)
@@ -181,7 +177,10 @@ class GhidraRetyper:
             # Length zero means field length determined from data type size
             new_union.add(dtype, 0, details.name, None)
 
-    def set_localvar_type(self, symbol:HighSymbol, dtype:datatype.DataType):
+    def set_funcvar_type(self, symbol:HighSymbol, dtype:datatype.DataType):
+        '''
+        Set local or param variable type
+        '''
         # Update data type
         ghidra_dtype = self.convert_dtype(dtype)
         # Skip when the field's data type is undefined (should only be enums now)
@@ -195,13 +194,17 @@ class GhidraRetyper:
         # do this last: I don't have data for globals right now and we may not need them
         # ...but, while you're doing the others if this is straightforward you can add
         # support for globals too
-        pass
+        raise Exception(f'TODO - implement set_globalvar_type')
 
-    def set_param_type(self, func_addr:int, param_name:str, dtype:datatype.DataType):
-        print(f'DYLAN TODO: set decompiler parameter {param_name} in {func_addr:#x} to type {dtype}')
+    # def set_param_type(self, func_addr:int, param_name:str, dtype:datatype.DataType):
+    #     print(f'DYLAN TODO: set decompiler parameter {param_name} in {func_addr:#x} to type {dtype}')
 
     def set_return_type(self, func_addr:int, dtype:datatype.DataType):
-        print(f'DYLAN TODO: set decompiler return type for function {func_addr:#x} to type {dtype}')
+        raise Exception('TODO - implement set_return_type')
+
+
+    # TODO: move all the type conversion to varlib or wherever I'm already
+    # converting from DataType -> Ghidra type
 
     def convert_dtype(self, dtype:datatype.DataType):
         if dtype.category == "BUILTIN":
@@ -236,7 +239,7 @@ class GhidraRetyper:
     def convert_struct_dtype(self, dtype:datatype.DataType):
         # Generate path and find in program dtm
         ghidra_dtype_path = f'{self.struct_category_path}/{dtype.name}'
-        ghidra_dtype = self.data_type_manager.getDataType(ghidra_dtype_path)
+        ghidra_dtype = self.dtype_mgr.getDataType(ghidra_dtype_path)
         if ghidra_dtype == None:
             raise Exception(f'ERROR: STRUCT {dtype.name} not found')
         return ghidra_dtype
@@ -244,7 +247,7 @@ class GhidraRetyper:
     def convert_union_dtype(self, dtype:datatype.DataType):
         # Generate path and find in program dtm
         ghidra_dtype_path = f'{self.union_category_path}/{dtype.name}'
-        ghidra_dtype = self.data_type_manager.getDataType(ghidra_dtype_path)
+        ghidra_dtype = self.dtype_mgr.getDataType(ghidra_dtype_path)
         if ghidra_dtype == None:
             raise Exception(f'ERROR: UNION {dtype.name} not found')
         return ghidra_dtype
@@ -271,31 +274,8 @@ class GhidraRetyper:
         self.add_to_data_type_manager(ghidra_dtype, False)
         # Get datatype from dtm
         ghidra_dtype_path = f'{self.func_category_path}/{dtype.name}'
-        ghidra_dtype = self.data_type_manager.getDataType(ghidra_dtype_path)
+        ghidra_dtype = self.dtype_mgr.getDataType(ghidra_dtype_path)
         if ghidra_dtype == None:
             raise Exception(f'ERROR: FUNC {dtype.name} not found')
         return ghidra_dtype
 
-    def get_function_symbols(self, func_addr):
-        # Get function from entry point address and return high symbol to name map for functions
-        func = self._get_function(func_addr)
-        return self._get_symbol_map(func)
-
-    def _get_function(self, func_addr:int):
-        # Get function from entry point address
-        func_addr = self.program.getAddressFactory().getDefaultAddressSpace().getAddress(func_addr)
-        return self.function_manager.getFunctionAt(func_addr)
-
-    def _get_symbol_map(self, func:Function) -> Dict[str, HighSymbol]:
-        # Decompile function and get high symbols
-        res = self.decomp_interface.decompileFunction(func, self.decomp_timeout_sec, None)
-        high_func = res.getHighFunction()
-
-        if res.timedOut:
-            raise Exception(f'Error: decompilation timed out for {func.name} (timeout={self.decomp_timeout_sec})')
-        if high_func is None:
-            raise Exception(f'Error: could not decompile {func.name} ({res.errorMessage})')
-
-        local_symbol_map = high_func.getLocalSymbolMap()
-        # Convert high symbols to name map
-        return dict(local_symbol_map.getNameToSymbolMap())

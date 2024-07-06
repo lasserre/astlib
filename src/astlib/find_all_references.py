@@ -1,7 +1,7 @@
 from .astviewer import *
 
 from typing import List
-from .ast import ASTNode
+from .ast import ASTNode, FunctionDecl
 
 class FindAllVarRefs(VisitAllChildrenByDefaultVisitor):
     def __init__(self, varname:str) -> None:
@@ -48,3 +48,33 @@ class FindAllStatementsContainingVar(VisitAllChildrenByDefaultVisitor):
                 self._statements[node] = Statement(node, [refexpr])
             else:
                 self._statements[node].refexprs.append(refexpr)
+
+def build_varid(bid:int, func_addr:int, var_signature:str, vartype:str) -> tuple:
+    '''
+    Builds the varid tuple (just a memory aid so I don't miss information)
+
+    bid: Binary ID
+    func_addr: Start address of function
+    var_signature: Variable signature
+    vartype: 'l' for local or 'p' for param
+    '''
+    return (bid, func_addr, var_signature, vartype)
+
+def compute_var_ast_signature(var_refs:List[ASTNode], func_addr:int) -> str:
+    '''
+    Compute the DIRTY-style variable signature for the given variable, given all the
+    references to the variable.
+
+    The signature will be a string containing the sorted list of decimal instruction offsets
+    (relative to the start of the function) in CSV format, and uniquely identifies a variable
+    '''
+    ref_instr_offsets = sorted([x.instr_addr - func_addr for x in var_refs])
+    return ','.join(map(str, ref_instr_offsets))
+
+def build_var_ast_signature(fdecl:FunctionDecl, varname:str) -> str:
+    '''
+    Compute the variable signature for the given variable by first
+    locating all references.
+    '''
+    var_refs = FindAllVarRefs(varname).visit(fdecl.func_body)
+    return compute_var_ast_signature(var_refs, fdecl.address)

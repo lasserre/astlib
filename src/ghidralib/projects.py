@@ -146,7 +146,12 @@ class GhidraCheckoutProgram:
         if not self.program.closed:
             self.proj.close(self.program)
 
-        self.domain_file.checkin(DefaultCheckinHandler(self.checkin_msg, False, False), True, None)
+        # TODO: try asking program if it's changed (instead of domain_file)
+        if self.program.changed:
+            print(f'PROGRAM CHANGED - CHECKING IN')
+            self.domain_file.checkin(DefaultCheckinHandler(self.checkin_msg, False, False), True, None)
+        else:
+            print(f'no change detected from program.changed, skipping checkin')
 
         # if self.domain_file.changed:
         #     print(f'Changes to {self.domain_file} detected - checking in')
