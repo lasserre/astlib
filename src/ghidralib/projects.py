@@ -142,20 +142,21 @@ class GhidraCheckoutProgram:
         return self
 
     def __exit__(self, etype, value, traceback):
-        # NOTE: saving only happens explicitly by client code
-        if not self.program.closed:
-            self.proj.close(self.program)
 
-        # TODO: try asking program if it's changed (instead of domain_file)
-        if self.program.changed:
-            print(f'PROGRAM CHANGED - CHECKING IN')
-            self.domain_file.checkin(DefaultCheckinHandler(self.checkin_msg, False, False), True, None)
+        # NOTE: [domain_file|program].changed property only works BEFORE YOU SAVE THE FILE!
+        # -> client code should NOT save...otherwise we won't know to check it in
+        # -> if the client wants to abort/don't save changes, they can CLOSE THE PROGRAM (co.proj.close(co.program))
+
+        if self.domain_file.open:
+            # not closed - check for changes...
+            if self.domain_file.changed:
+                print(f'PROGRAM CHANGED - CHECKING IN')
+                self.proj.save(self.program)
+                self.proj.close(self.program)
+                self.domain_file.checkin(DefaultCheckinHandler(self.checkin_msg, False, False), True, None)
+            else:
+                print(f'no change detected from program.changed, skipping checkin')
+                self.proj.close(self.program)
+                self.domain_file.undoCheckout(False)
         else:
-            print(f'no change detected from program.changed, skipping checkin')
-
-        # if self.domain_file.changed:
-        #     print(f'Changes to {self.domain_file} detected - checking in')
-        #     self.domain_file.checkin(DefaultCheckinHandler(self.checkin_msg, False, False), True, None)
-        # else:
-        #     print(f'No changes to file, releasing checkout')
-        #     self.domain_file.undoCheckout(False)
+            self.domain_file.undoCheckout(False)

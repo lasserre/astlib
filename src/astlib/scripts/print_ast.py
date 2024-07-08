@@ -475,9 +475,9 @@ class PrintASTVisitor(ASTVisitor):
         for p in params:
             if self.isFuncptr(p.dtype):
                 self._current_varname = p.name
-                param_strlist.append(self.visit(p.dtype))
+                param_strlist.append(str(p.dtype))
             else:
-                param_strlist.append(f'{self.visit(p.dtype)} {p.name}')
+                param_strlist.append(f'{p.dtype} {p.name}')
 
         # if self.validation_mode:
         self._use_ptr_not_array = False
@@ -623,11 +623,11 @@ class PrintASTVisitor(ASTVisitor):
     def visit_UnaryOperator(self, unop:ASTNode):
         return f'{unop.opcode}{self.visit(unop.inner[0])}'
 
-    def isFuncptr(self, dtype:ASTNode):
-        if dtype.kind == 'PointerType':
-            while dtype.kind == 'PointerType':  # walk through pointer layers...
+    def isFuncptr(self, dtype:DataType):
+        if dtype.category == DataTypeCategories.Pointer:
+            while dtype.category == DataTypeCategories.Pointer:  # walk through pointer layers...
                 dtype = dtype.inner[0]
-            return dtype.kind == 'FunctionType'
+            return dtype.category == DataTypeCategories.Function
         return False
 
     def visit_VarDecl(self, vdecl:ASTNode):
