@@ -5,9 +5,19 @@ if typing.TYPE_CHECKING:
 
 # CLS: this should only be imported if pyhidra has been started
 
+from typing import List, Dict
+import pandas as pd
+
 import ghidra
-from ghidra.app.decompiler import DecompInterface, DecompileOptions
+from ghidra.app.decompiler import DecompInterface, DecompileOptions, DecompileResults
 from ghidra.program.database import ProgramDB
+from ghidra.program.model.listing import FunctionManager, Function, Program
+from ghidra.program.model.data import DataTypeManager
+from ghidra.program.model.pcode import HighSymbol
+
+from astlib import TranslationUnitDecl, FindAllVarRefs, compute_var_ast_signature, build_varid, get_vartype, read_json_str
+from varlib import StructDatabase
+from .export_types import export_ghidra_types_to_sdb
 
 def get_decompiler_interface(program:ProgramDB, options:DecompileOptions=None) -> DecompInterface:
     if not options:
@@ -17,3 +27,118 @@ def get_decompiler_interface(program:ProgramDB, options:DecompileOptions=None) -
     ifc.setOptions(options)
     ifc.openProgram(program)
     return ifc
+
+class AstDecompiler:
+    def __init__(self, program:Program, bid:int=-1, timeout_sec:int=240, options:DecompileOptions=None) -> None:
+        '''
+        program: The program to be decompiled
+        bid: The binary id associated with this program (if any) to use when generating varids
+        timeout_sec: Decompiler timeout in seconds
+        options: Decompiler options
+        '''
+        self.program = program
+        self.bid = bid
+        self.timeout_sec = timeout_sec
+        self.options = DecompileOptions() if options is None else options
+
+        self.ifc = DecompInterface()
+        self.ifc.setOptions(self.options)
+
+        self.last_res:DecompileResults = None   # cache last decompile result
+        self.last_error_msg:str = ''
+
+    def __enter__(self) -> 'AstDecompiler':
+        self.ifc.openProgram(self.program)
+        return self
+
+    def __exit__(self, etype, value, traceback):
+        # CLS: I think this just ends the decompiler process, I don't think it
+        # does anything to the program domain_file (which should still be open)
+        self.ifc.closeProgram()
+
+    @property
+    def func_mgr(self) -> FunctionManager:
+        return self.program.functionManager
+
+    @property
+    def datatype_mgr(self) -> DataTypeManager:
+        return self.program.dataTypeManager
+
+    @property
+    def functions(self) -> List[Function]:
+        return list(self.func_mgr.getFunctions(True))
+
+    @property
+    def nonthunk_functions(self) -> List[Function]:
+        return [f for f in self.func_mgr.getFunctions(True) if not f.isThunk()]
+
+    def get_local_sym_dict(self, res:DecompileResults) -> Dict[str, HighSymbol]:
+        '''
+        Get dictionary of localSymbolMap from decompile results
+        '''
+        return dict(res.highFunction.localSymbolMap.nameToSymbolMap)
+
+    @property
+    def local_sym_dict(self) -> Dict[str, HighSymbol]:
+        '''
+        Return the local symbol dictionary from the last function decompiled
+        '''
+        return self.get_local_sym_dict(self.last_res)
+
+    def export_program_struct_db(self) -> StructDatabase:
+        '''
+        Export the structure database defining the composite types for this program
+        '''
+        return export_ghidra_types_to_sdb(self.datatype_mgr)
+
+    def decompile_ast_json(self, func:Function) -> str:
+        '''
+        Decompiles the given function AST and returns the result as a JSON string
+        '''
+        self.last_res = None
+        self.last_error_msg = ''
+
+        res = self.ifc.decompileFunction(func, self.timeout_sec, None)
+        error_msg, ast_json = res.errorMessage.split('#$#$# BEGIN AST #@#@#')
+
+        self.last_res = res
+        self.last_error_msg = error_msg
+
+        return '' if not res.decompileCompleted() else ast_json
+
+    def decompile_ast(self, func:Function, sdb:StructDatabase=None) -> TranslationUnitDecl:
+        '''
+        Decompiles the given function AST
+        '''
+        ast_json = self.decompile_ast_json(func)
+        if not ast_json:
+            return None     # last_error_msg should be filled out
+
+        return read_json_str(ast_json, sdb=sdb)
+
+    def export_func_vars(self, func:Function) -> pd.DataFrame:
+        '''
+        Exports a table describing the AST variables and their data types for the
+        locals and parameters of the given function.
+        '''
+        tudecl = self.decompile_ast(func)
+        fdecl = tudecl.get_fdecl()
+        func_vars = fdecl.params + fdecl.local_vars
+
+        # find all refs & compute signatures
+        var_refs = [FindAllVarRefs(v.name).visit(fdecl.func_body) for v in func_vars]
+        var_sigs = [compute_var_ast_signature(refs, fdecl.address) for refs in var_refs]
+        varids = [build_varid(self.bid, fdecl.address, var_sigs[i], get_vartype(func_vars[i])) for i in range(len(func_vars))]
+
+        # save data in table form and return
+        rows = [[*varids[i], v.name, v.location, v.dtype, v.dtype.to_dict()] for i, v in enumerate(func_vars)]
+        return pd.DataFrame.from_records(rows, columns=[
+            'BinaryId','FunctionStart','Signature','Vartype','Name','Location','Type','TypeJson',
+        ])
+
+    def export_vars(self, func_list:List[Function]) -> pd.DataFrame:
+        '''
+        Exports a combined table for all the function vars in the
+        specified function list
+        '''
+        return pd.concat([self.export_func_vars(f) for f in func_list]).reset_index(drop=True)

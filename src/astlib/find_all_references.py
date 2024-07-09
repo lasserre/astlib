@@ -1,7 +1,7 @@
 from .astviewer import *
 
 from typing import List
-from .ast import ASTNode, FunctionDecl
+from .ast import ASTNode, FunctionDecl, DeclRefExpr, ValueDecl
 
 class FindAllVarRefs(VisitAllChildrenByDefaultVisitor):
     def __init__(self, varname:str) -> None:
@@ -48,6 +48,20 @@ class FindAllStatementsContainingVar(VisitAllChildrenByDefaultVisitor):
                 self._statements[node] = Statement(node, [refexpr])
             else:
                 self._statements[node].refexprs.append(refexpr)
+
+def get_vartype(decl:ValueDecl) -> str:
+    '''
+    Returns the vartype string (as used in varid) for a local or parameter
+    variable declaration
+    '''
+    return 'l' if decl.kind == 'VarDecl' else 'p'
+
+def get_vartype_from_ref(ref:DeclRefExpr) -> str:
+    '''
+    Returns the vartype string (as used in varid) for a local or parameter
+    variable reference.
+    '''
+    return get_vartype(ref.referencedDecl)
 
 def build_varid(bid:int, func_addr:int, var_signature:str, vartype:str) -> tuple:
     '''
