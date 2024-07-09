@@ -8,11 +8,14 @@ from ghidra.base.project import GhidraProject
 from ghidra.framework.model import ProjectLocator, DomainFile
 from ghidra.framework.data import DefaultCheckinHandler
 from ghidra.program.model.listing import Program
+from ghidra.app.decompiler import DecompileOptions
 
 from pathlib import Path
 import uuid
 import shutil
 from typing import List
+
+from .decompiler import AstDecompiler
 
 def get_project_manager_headless() -> ghidra.framework.project.DefaultProjectManager:
     '''
@@ -123,7 +126,8 @@ class GhidraCheckoutProgram:
     Checks out the given file during __enter__ and checks in any changes on exit
     '''
     def __init__(self, proj:GhidraProject, domain_file:DomainFile, read_only:bool=False, exclusive:bool=False,
-                task_monitor=None) -> None:
+                task_monitor=None,
+                bid:int=-1, decomp_timeout_sec:int=240, decomp_opts:DecompileOptions=None) -> None:
         self.proj = proj
         self.domain_file = domain_file
         self.read_only = read_only
@@ -132,6 +136,18 @@ class GhidraCheckoutProgram:
         self.checkin_msg = ''   # client code should set this inside the with block to set their commit msg
         self.program:Program = None
 
+        # decompiler options
+        self.bid = bid
+        self.decomp_timeout_sec = decomp_timeout_sec
+        self.decomp_opts = decomp_opts
+
+        self._decompiler:AstDecompiler = None
+
+    @property
+    def decompiler(self) -> AstDecompiler:
+        '''Handle to the AST decompiler for this program'''
+        return self._decompiler
+
     def __enter__(self) -> 'GhidraCheckoutProgram':
         success = self.domain_file.checkout(self.exclusive, self.monitor)
         if not success:
@@ -139,9 +155,16 @@ class GhidraCheckoutProgram:
 
         self.program = self.proj.openProgram(self.domain_file.parent.pathname, self.domain_file.name, self.read_only)
 
+        # init decompiler
+        self._decompiler = AstDecompiler(self.program, self.bid, self.decomp_timeout_sec, self.decomp_opts)
+        self._decompiler.__enter__()
+
         return self
 
     def __exit__(self, etype, value, traceback):
+
+        self._decompiler.__exit__(etype, value, traceback)
+        self._decompiler = None
 
         # NOTE: [domain_file|program].changed property only works BEFORE YOU SAVE THE FILE!
         # -> client code should NOT save...otherwise we won't know to check it in
