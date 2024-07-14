@@ -7,6 +7,7 @@ if typing.TYPE_CHECKING:
 
 from typing import List, Dict
 import pandas as pd
+from tqdm import tqdm
 
 import ghidra
 from ghidra.app.decompiler import DecompInterface, DecompileOptions, DecompileResults
@@ -141,4 +142,5 @@ class AstDecompiler:
         Exports a combined table for all the function vars in the
         specified function list
         '''
-        return pd.concat([self.export_func_vars(f) for f in func_list]).reset_index(drop=True)
+
+        return pd.concat([self.export_func_vars(f) for f in tqdm(func_list)]).reset_index(drop=True)
