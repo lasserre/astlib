@@ -63,6 +63,12 @@ def get_vartype_from_ref(ref:DeclRefExpr) -> str:
     '''
     return get_vartype(ref.referencedDecl)
 
+def binary_id(binary_name:str) -> int:
+    '''
+    Extracts the binary ID from the name of a binary file in Ghidra
+    '''
+    return int(binary_name.split('.')[0])
+
 def build_varid(bid:int, func_addr:int, var_signature:str, vartype:str) -> tuple:
     '''
     Builds the varid tuple (just a memory aid so I don't miss information)

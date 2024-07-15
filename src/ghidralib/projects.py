@@ -30,25 +30,54 @@ def get_project_manager_headless() -> ghidra.framework.project.DefaultProjectMan
     tmp_proj.close()
     return proj_manager
 
-def get_all_files_in_project(proj:GhidraProject, no_debug:bool=False) -> List[DomainFile]:
+def is_debug_binary(bin_file:DomainFile) -> bool:
+    '''
+    Returns true if this file is a debug binary (determined by its name, not DWARF info)
+    '''
+    # check that '.' is in the text preceding '.debug' to avoid an edge case I actually
+    # had where a binary was actually named "debug", giving
+    #   stripped version:     0.debug
+    #   debug version:        0.debug.debug
+    # (this check ensures 0.debug is treated like a stripped binary)
+    return str(bin_file.name).endswith('.debug') and '.' in str(bin_file.name)[:-6]
+
+def get_all_files_in_project(proj:GhidraProject, debug_only:bool=False, strip_only:bool=False) -> List[DomainFile]:
     '''
     Collect a list of all files in this project
+
+    debug_only: Don't include the stripped binaries
+    strip_only: Don't include the debug binaries
     '''
+    assert not (debug_only and strip_only), "debug_only and strip_only are mutually exclusive"
+
     folders = [proj.rootFolder]
     all_files = []
-
-    # if str(f.name).endswith('.debug') and '.' in str(f.name)[:-6]:
 
     while folders:
         f = folders.pop()
         all_files.extend(f.files)
         folders.extend(f.folders)
 
-    if no_debug:
-        debug_files = [f for f in all_files if str(f.name).endswith('.debug') and '.' in str(f.name)[:-6]]
-        return [f for f in all_files if f not in debug_files]
+    if strip_only:
+        return [f for f in all_files if not is_debug_binary(f)]
+    elif debug_only:
+        return [f for f in all_files if is_debug_binary(f)]
 
     return all_files
+
+def locate_binaries_from_project(proj:GhidraProject, binary_list:List[str],
+                                debug_only:bool=False, strip_only:bool=False) -> List[DomainFile]:
+    '''
+    Locate the specified list of binaries from the project, and return them as a list of DomainFiles
+
+    binary_list: The list of specific binary names to locate (without binary id prefix or .debug suffix)
+    '''
+    repo_file_paths = {}  # map de-numbered name -> DomainFile paths
+    for f in get_all_files_in_project(proj, debug_only=debug_only, strip_only=strip_only):
+        # remove initial binary number (e.g. 4.binary_name -> binary_name)
+        denumbered_name = str(f.name)[str(f.name).find('.')+1:]
+        repo_file_paths[denumbered_name] = f.pathname
+    return [repo_file_paths[binary] for binary in binary_list]
 
 def locate_ghidra_binary(proj:GhidraProject, run_name:str, binid:int, debug_binary:bool) -> DomainFile:
     '''
@@ -84,6 +113,15 @@ def locate_ghidra_binary(proj:GhidraProject, run_name:str, binid:int, debug_bina
     # bin_file = root_folder.getFolder('run1.x64-gcc-O0.astera').getFile('6.fighter')
     bin_file = matches[0]
     return bin_file
+
+def get_debug_binary(strip_binary:DomainFile):
+    '''
+    Get the debug version of this binary file
+    '''
+    matches = [f for f in strip_binary.parent.files if f.name == f'{strip_binary.name}.debug']
+    if len(matches) > 1:
+        raise Exception(f'Multiple possible debug file matches found for {strip_binary.name}')
+    return matches[0] if matches else None
 
 class OpenSharedGhidraProject:
     '''

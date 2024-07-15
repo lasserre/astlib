@@ -116,31 +116,3 @@ class AstDecompiler:
             return None     # last_error_msg should be filled out
 
         return read_json_str(ast_json, sdb=sdb)
-
-    def export_func_vars(self, func:Function) -> pd.DataFrame:
-        '''
-        Exports a table describing the AST variables and their data types for the
-        locals and parameters of the given function.
-        '''
-        tudecl = self.decompile_ast(func)
-        fdecl = tudecl.get_fdecl()
-        func_vars = fdecl.params + fdecl.local_vars
-
-        # find all refs & compute signatures
-        var_refs = [FindAllVarRefs(v.name).visit(fdecl.func_body) for v in func_vars]
-        var_sigs = [compute_var_ast_signature(refs, fdecl.address) for refs in var_refs]
-        varids = [build_varid(self.bid, fdecl.address, var_sigs[i], get_vartype(func_vars[i])) for i in range(len(func_vars))]
-
-        # save data in table form and return
-        rows = [[*varids[i], v.name, v.location, v.dtype, v.dtype.to_dict()] for i, v in enumerate(func_vars)]
-        return pd.DataFrame.from_records(rows, columns=[
-            'BinaryId','FunctionStart','Signature','Vartype','Name','Location','Type','TypeJson',
-        ])
-
-    def export_vars(self, func_list:List[Function]) -> pd.DataFrame:
-        '''
-        Exports a combined table for all the function vars in the
-        specified function list
-        '''
-
-        return pd.concat([self.export_func_vars(f) for f in tqdm(func_list)]).reset_index(drop=True)
