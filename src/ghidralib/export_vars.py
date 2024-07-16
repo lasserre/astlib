@@ -35,7 +35,7 @@ def export_func_vars(decompiler:AstDecompiler, func:Function, bid:int=-1) -> pd.
     varids = [build_varid(bid, fdecl.address, var_sigs[i], get_vartype(func_vars[i])) for i in range(len(func_vars))]
 
     # save data in table form and return
-    rows = [[*varids[i], v.name, v.location, v.dtype, v.dtype.to_dict()] for i, v in enumerate(func_vars)]
+    rows = [[*varids[i], v.name, v.location, v.dtype, v.dtype.to_json()] for i, v in enumerate(func_vars)]
     return pd.DataFrame.from_records(rows, columns=[
         'BinaryId','FunctionStart','Signature','Vartype','Name','Location','Type','TypeJson',
     ])
@@ -45,22 +45,19 @@ def export_vars(decompiler:AstDecompiler, func_list:List[Function], bid:int=-1) 
     Exports a combined table for all the function vars in the
     specified function list
     '''
-    return pd.concat([export_func_vars(decompiler, f, bid) for f in tqdm(func_list)]).reset_index(drop=True)
+    return pd.concat(
+            [export_func_vars(decompiler, f, bid) for f in tqdm(func_list, desc=decompiler.program.name)]
+        ).reset_index(drop=True)
 
-def export_debug_vars(proj:GhidraProject, bin_files:List[DomainFile], limit_funcs:int=None) -> pd.DataFrame:
+def export_debug_vars(proj:GhidraProject, debug_files:List[DomainFile], limit_funcs:int=None) -> pd.DataFrame:
     '''
     Exports the debug variable types to a combined data frame for the given binaries
     '''
     # the reason to make this debug-specific is because we only care about
     # the data types - we don't need to export the ASTs themselves
     bin_vdfs = []
-    for i, bin_file in enumerate(bin_files):
-        debug_file = get_debug_binary(bin_file)
+    for i, debug_file in enumerate(debug_files):
         bid = binary_id(debug_file.name)
-        if not debug_file:
-            print(f'No debug file match found for {bin_file.name}')
-            continue
-
         with GhidraCheckoutProgram(proj, debug_file, bid=bid) as co:
             nonthunks = co.decompiler.nonthunk_functions[:limit_funcs]
             bin_vdfs.append(export_vars(co.decompiler, nonthunks, bid))

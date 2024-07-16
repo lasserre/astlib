@@ -121,6 +121,10 @@ class DataType:
         '''Converts the data type into a serializable dict'''
         raise NotImplementedError(f'to_dict not implemented in {self.__class__.__name__}')
 
+    def to_json(self) -> str:
+        '''Serializes this type as a json string'''
+        return json.dumps(self.to_dict())
+
     def _get_base_dict(self) -> dict:
         return {
             'kind': str(self.__class__.__name__)

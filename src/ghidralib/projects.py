@@ -76,7 +76,7 @@ def locate_binaries_from_project(proj:GhidraProject, binary_list:List[str],
     for f in get_all_files_in_project(proj, debug_only=debug_only, strip_only=strip_only):
         # remove initial binary number (e.g. 4.binary_name -> binary_name)
         denumbered_name = str(f.name)[str(f.name).find('.')+1:]
-        repo_file_paths[denumbered_name] = f.pathname
+        repo_file_paths[denumbered_name] = f
     return [repo_file_paths[binary] for binary in binary_list]
 
 def locate_ghidra_binary(proj:GhidraProject, run_name:str, binid:int, debug_binary:bool) -> DomainFile:
@@ -122,6 +122,27 @@ def get_debug_binary(strip_binary:DomainFile):
     if len(matches) > 1:
         raise Exception(f'Multiple possible debug file matches found for {strip_binary.name}')
     return matches[0] if matches else None
+
+def verify_ghidra_revision(domain_file:DomainFile, expected_revision:int, rollback_delete:bool):
+    '''
+    Verifies this Ghidra file is at the expected revision.
+
+    If rollback_delete is true, files beyond expected_revision will be rolled back
+    by deleting revisions. Otherwise, an exception will be thrown.
+
+    An exception will be thrown in any case if the revision is < the expected revision
+    '''
+    if domain_file.version != expected_revision:
+        msg = f'{domain_file.name} @ version {domain_file.version} does not match expected version {expected_revision}'
+
+        if domain_file.version > expected_revision and rollback_delete:
+            print(msg)
+            print(f'Rolling back {domain_file.name} from version {domain_file.version} to version {expected_revision}...')
+            for v in range(domain_file.version, expected_revision, -1):
+                domain_file.delete(v)
+        else:
+            # version < expected_revision or rollback_delete is false
+            raise Exception(msg)
 
 class OpenSharedGhidraProject:
     '''
