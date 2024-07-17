@@ -67,6 +67,7 @@ class GhidraRetyper:
         self.union_category_path = CategoryPath('/GhidraRetyper/Unions')
         self.func_category_path = CategoryPath('/GhidraRetyper/Funcs')
 
+    @property
     def dtype_mgr(self) -> ProgramBasedDataTypeManager:
         '''Returns a handle to the data type manager'''
         return self.program.getDataTypeManager()
@@ -91,38 +92,34 @@ class GhidraRetyper:
 
     # TODO: this is a long function, need to break it up
     def define_all_reference_types(self, overwrite_existing:bool=False):
-        # Get list of structs and unions by sid for composite type identification
+        '''
+        Define all of the structure and union types in the reference StructDatabase
+        (prior to retyping any variables)
+        '''
         structs = self.sdb.structs_by_id
         unions = self.sdb.unions_by_id
-        # Check for conflicts
+
         if self.check_conflicts(structs, unions) == True:
             raise Exception('ERROR: multiple definitions for the same composite')
+
         # Iterate through all composites and create empty structs/unions
-        for sid in structs | unions:
+        for sid, sdef in structs.items():
             # Define empty struct
-            if sid in structs.keys():
-                stype = structs[sid]
-                new_struct = StructureDataType(self.struct_category_path, stype.name, 0)
-                self.add_to_data_type_manager(new_struct, None)
+            new_struct = StructureDataType(self.struct_category_path, sdef.name, 0)
+            # CLS NOTE: Dylan had "None" as the 2nd argument instead of "overwrite_existing"
+            self.add_to_data_type_manager(new_struct, overwrite_existing)
+        for uid, udef in unions.items():
             # Define empty union
-            elif sid in unions.keys():
-                utype = unions[sid]
-                new_union = UnionDataType(self.union_category_path, utype.name)
-                self.add_to_data_type_manager(new_union, overwrite_existing)
-            # Something went wrong and sid not found (should never happen)
-            else:
-                raise Exception(f'ERROR: {sid} not in structure or union keys')
+            new_union = UnionDataType(self.union_category_path, udef.name)
+            self.add_to_data_type_manager(new_union, overwrite_existing)
+
         # Iterate through composites again and add definitions
-        for sid in structs | unions:
+        for sid, sdef in structs.items():
             # Define internal struct members
-            if sid in structs.keys():
-                self.define_struct_type(structs[sid], overwrite_existing)
+            self.define_struct_type(sdef, overwrite_existing)
+        for uid, udef in unions.items():
             # Define internal union members
-            elif sid in unions.keys():
-                self.define_union_type(unions[sid], overwrite_existing)
-            # Something went wrong and sid not found (should never happen)
-            else:
-                raise Exception(f'ERROR: {sid} not in structure or union keys')
+            self.define_union_type(udef, overwrite_existing)
 
     def add_to_data_type_manager(self, dtype:DataType, overwrite_existing:bool=False):
         # Determine conflict resolution policy
@@ -133,49 +130,42 @@ class GhidraRetyper:
         # Add data type to dtm with appropriate conflict resolutin set
         self.dtype_mgr.addDataType(dtype, conflict_resolution_policy)
 
-    # TODO: struct and union definitions are very similar
-    # Could probably figure out how to shrink these functions down with some common helper functions
-    def define_struct_type(self, stype:datatype.StructType, overwrite_existing:bool=False):
-        # Get empty struct from data type manager
-        ghidra_dtype_path = f'{self.struct_category_path}/{stype.name}'
-        new_struct = self.dtype_mgr.getDataType(ghidra_dtype_path)
+    def define_struct_type(self, sdef:datatype.StructDefinition, overwrite_existing:bool=False):
+        ghidra_dtype_path = f'{self.struct_category_path}/{sdef.name}'
+        new_struct = self.dtype_mgr.getDataType(ghidra_dtype_path)      # retrieve the existing empty struct
 
-        # TODO: fix this - dict items() is not guaranteed to be sorted
-        # Sort fields by offset to ensure correct generation of structure internals
-        fields = stype.layout.fields_by_offset.items()
-        fields = dict(sorted(fields)).items()
-
-        # Iterate through all fields in dtype structure layout and insert field at correct byte offset
-        for offset, details in fields:
-            dtype = self.convert_dtype(details.dtype)
+        # insert fields into structure IN OFFSET ORDER or it won't work correctly!
+        for offset in sorted(sdef.layout.keys()):
+            field = sdef.layout[offset]
+            dtype = self.convert_dtype(field.dtype)
             # Skip when the field's data type is undefined (should only be enums now)
             if dtype == None:
-                print(f"WARNING: {details.dtype} element of structure (category={details.dtype.category}) not found")
+                print(f"WARNING: {field.dtype} element of structure (category={field.dtype.category}) not found")
                 continue
             # Raise exception when the field's data type is undefined
             if dtype.name == 'void':
-                raise Exception(f'ERROR: structure {details.dtype} contains void field')
+                raise Exception(f'ERROR: structure {field.dtype} contains void field')
             # Insert field at byte offset defined in layout
             # Length zero means field length determined from data type size
-            new_struct.insertAtOffset(offset, dtype, 0, details.name, None)
+            new_struct.insertAtOffset(offset, dtype, 0, field.name, None)
 
-    def define_union_type(self, utype:datatype.UnionType, overwrite_existing:bool=False):
+    def define_union_type(self, udef:datatype.UnionDefinition, overwrite_existing:bool=False):
         # Get empty union from data type manager
-        ghidra_dtype_path = f'{self.union_category_path}/{utype.name}'
+        ghidra_dtype_path = f'{self.union_category_path}/{udef.name}'
         new_union = self.dtype_mgr.getDataType(ghidra_dtype_path)
         # Iterate through all fields in union dtype composite and add to empty union
-        for details in utype.layout.fields[0]:
-            dtype = self.convert_dtype(details.dtype)
+        for field in udef.layout.fields:
+            dtype = self.convert_dtype(field.dtype)
             # Skip when the field's data type is undefined (should only be ENUMS now)
             if dtype == None:
-                print(f"WARNING: {details.dtype} element of union (category={details.dtype.category}) not found")
+                print(f"WARNING: {field.dtype} element of union (category={field.dtype.category}) not found")
                 continue
             # Raise exception when the field's data type is undefined
             if dtype.name == 'void':
-                raise Exception(f'ERROR: union {details.dtype.name} contains void field')
+                raise Exception(f'ERROR: union {field.dtype.name} contains void field')
             # Insert field
             # Length zero means field length determined from data type size
-            new_union.add(dtype, 0, details.name, None)
+            new_union.add(dtype, 0, field.name, None)
 
     def set_funcvar_type(self, symbol:HighSymbol, dtype:datatype.DataType):
         '''

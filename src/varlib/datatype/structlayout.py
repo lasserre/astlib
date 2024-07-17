@@ -42,13 +42,21 @@ class StructField:
     def from_dict(d:dict, sdb) -> 'StructField':
         return StructField(DataType.from_dict(d['dtype'], sdb), d['name'])
 
-class StructLayout:
+class StructLayout(dict):
     '''
     This defines the actual structure layout, and behaves like a simple
     record of fields and their offsets and types.
+
+    This just wraps a dict, but is expected to have the format/type:
+            Dict[int, StructField]
     '''
-    def __init__(self, fields_by_offset:Dict[int, StructField] = None) -> None:
-        self.fields_by_offset:Dict[int, StructField] = fields_by_offset if fields_by_offset else {}
+    def __init__(self, *arg, **kw):
+        super(StructLayout, self).__init__(*arg, **kw)
+
+    @property
+    def fields_by_offset(self) -> Dict[int, StructField]:
+        # only for backwards-compatibility :)
+        return self
 
     def __eq__(self, other, dtchain:List[str]=None):
         '''
@@ -59,10 +67,10 @@ class StructLayout:
         '''
         if not isinstance(other, StructLayout):
             return False
-        if set(self.fields_by_offset.keys()) != set(other.fields_by_offset.keys()):
+        if set(self.keys()) != set(other.keys()):
             return False    # set of member offsets don't match
-        for off, field in self.fields_by_offset.items():
-            if not field.__eq__(other.fields_by_offset[off], dtchain):
+        for off, field in self.items():
+            if not field.__eq__(other[off], dtchain):
                 return False
         return True
 
@@ -70,10 +78,10 @@ class StructLayout:
         # - have to sort keys to guarantee that hash is consistent
         # - use field.name instead of the field hash to avoid any recursive issues
         #   for structs that have pointers to themselves
-        return hash(tuple([self.fields_by_offset[k].name for k in sorted(self.fields_by_offset.keys())]))
+        return hash(tuple([self[k].name for k in sorted(self.keys())]))
 
     def __str__(self):
-        return '\n'.join([f'{k:#x}: {self.fields_by_offset[k]}' for k in sorted(self.fields_by_offset.keys())])
+        return '\n'.join([f'{k:#x}: {self[k]}' for k in sorted(self.keys())])
 
     def __repr__(self) -> str:
         return str(self)
@@ -83,11 +91,11 @@ class StructLayout:
         Returns a mapping of {offset: type name} for the top-level members of this
         structure (for quicker equality comparisons across translation units)
         '''
-        return {off: f.dtype.typename_basic for off, f in self.fields_by_offset.items()}
+        return {off: f.dtype.typename_basic for off, f in self.items()}
 
     def to_dict(self) -> dict:
         return {
-            off: field.to_dict() for off, field in self.fields_by_offset.items()
+            off: field.to_dict() for off, field in self.items()
         }
 
     @staticmethod
