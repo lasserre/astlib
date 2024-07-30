@@ -172,6 +172,9 @@ class OpenSharedGhidraProject:
         self.shared_gp = GhidraProject.openProject(shared_proj_dir.parent, shared_proj_dir.stem, False)
         self.shared_proj_dir = shared_proj_dir
 
+        if not self.repoAdapter.server.connected:
+            raise Exception(f'Unable to connect to Ghidra repo {self.repoName} at {self.host}:{self.port}')
+
         return self.shared_gp
 
     def __exit__(self, etype, value, traceback):
