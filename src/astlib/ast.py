@@ -732,9 +732,20 @@ class TranslationUnitDecl(ASTNode):
         # so references can reach back to the decl
         self._decls_by_id:Dict[int,ValueDecl] = {}
 
+        self.logfile:str = ''   # any log messages generated from Ghidra C++ ASTBuilder
+                                # (usually indicating unimplemented code which should be
+                                # treated like an error)
+
+    def to_dict(self) -> dict:
+        return {
+            **super().to_dict(),
+            'logfile': self.logfile,
+        }
+
     @staticmethod
     def from_dict(d:dict, ctx:FromDictContext) -> 'TranslationUnitDecl':
         tudecl = TranslationUnitDecl()
+        tudecl.logfile = d['logfile']
         ctx.tudecl = tudecl     # there is only one translation unit, so we're it!
         tudecl._children_from_dict(d, ctx)
         return tudecl
@@ -786,7 +797,7 @@ class JsonRecursionError(Exception):
     def __init__(self) -> None:
         super().__init__()
 
-def read_json_str(json_str:str, sdb:StructDatabase=None) -> ASTNode:
+def read_json_str(json_str:str, sdb:StructDatabase=None) -> TranslationUnitDecl:
     try:
         data = json.loads(json_str)
     except RecursionError as e:

@@ -47,6 +47,7 @@ class AstDecompiler:
 
         self.last_res:DecompileResults = None   # cache last decompile result
         self.last_error_msg:str = ''
+        self.last_ast_log:str = ''      # filled out in case of AST errors (content in logfile)
 
     def __enter__(self) -> 'AstDecompiler':
         self.ifc.openProgram(self.program)
@@ -92,12 +93,13 @@ class AstDecompiler:
         '''
         return export_ghidra_types_to_sdb(self.datatype_mgr)
 
-    def decompile_ast_json(self, func:Function) -> str:
+    def _decompile_ast_json(self, func:Function) -> str:
         '''
         Decompiles the given function AST and returns the result as a JSON string
         '''
         self.last_res = None
         self.last_error_msg = ''
+        self.last_ast_log = ''
 
         res = self.ifc.decompileFunction(func, self.timeout_sec, None)
         error_msg, ast_json = res.errorMessage.split('#$#$# BEGIN AST #@#@#')
@@ -111,8 +113,10 @@ class AstDecompiler:
         '''
         Decompiles the given function AST
         '''
-        ast_json = self.decompile_ast_json(func)
+        ast_json = self._decompile_ast_json(func)
         if not ast_json:
             return None     # last_error_msg should be filled out
 
-        return read_json_str(ast_json, sdb=sdb)
+        tudecl = read_json_str(ast_json, sdb=sdb)
+        self.last_ast_log = tudecl.logfile
+        return tudecl if not self.last_ast_log else None
