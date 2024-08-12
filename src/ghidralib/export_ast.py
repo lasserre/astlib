@@ -2,6 +2,7 @@
 import argparse
 import json
 from pathlib import Path
+from rich.console import Console
 import subprocess
 import shutil
 import typing
@@ -9,6 +10,8 @@ if typing.TYPE_CHECKING:
     import ghidra
     from ghidra.ghidra_builtins import *
 from typing import Dict, Any
+
+from astlib import binary_id
 
 from wildebeest import RunStep
 from wildebeest.run import Run
@@ -19,57 +22,70 @@ from wildebeest.ghidrautil import GhidraKeys
 def decompile_all(export_folder:Path, host:str, repo:str, folder:str, binaryName:str, timeout_sec:int, max_funcs:int=-1,
                 port:int=13100, ast_only:bool=False):
 
+    console = Console()
+
     # start pyhidra so ghidra things work :)
     import pyhidra
     pyhidra.start()
 
-    import ghidra
-    from ghidra.app.decompiler import DecompInterface, DecompileOptions
-    from ghidra.program.database import ProgramDB
-
-    from ghidralib.projects import OpenSharedGhidraProject
-    from ghidralib.decompiler import get_decompiler_interface
+    from ghidralib.projects import verify_ghidra_revision, GhidraCheckoutProgram, get_project_manager_headless, OpenSharedGhidraProject
+    from ghidralib.decompiler import AstDecompiler
     from ghidralib.export_types import export_ghidra_types_to_sdb
 
-    failed_decompilations = []
-
     with OpenSharedGhidraProject(host, repo, port) as proj:
-        print(f'Opening shared project @ {host}:{port}: repo={repo}, folder={folder}, binary={binaryName}')
-        prog = proj.openProgram(folder, binaryName, True)
-        fm = prog.getFunctionManager()
-        ifc = get_decompiler_interface(prog)
 
-        sdb_file = export_folder/f'{binaryName}.sdb'
-        print(f'Exporting all Ghidra data types to {sdb_file.name}...')
-        sdb = export_ghidra_types_to_sdb(prog.getDataTypeManager())
-        sdb.to_json(sdb_file)
+        bin_file = proj.projectData.getFile(f'{folder}/{binaryName}')
+        bid = binary_id(bin_file.name)
+        verify_ghidra_revision(bin_file, expected_revision=1, rollback_delete=False)
 
-        if ast_only:
-            ifc.toggleCCode(False)
+        failed_decompilations = []
+        failed_ast_exports = []
+        failed_ast_log = []
 
-        def get_nonthunks(fm:ghidra.program.model.listing.FunctionManager):
-            return (x for x in fm.getFunctions(True) if not x.isThunk())
+        with GhidraCheckoutProgram(proj, bin_file) as co:
+            sdb_file = export_folder/f'{binaryName}.sdb'
+            print(f'Exporting all Ghidra data types to {sdb_file.name}...')
+            sdb = export_ghidra_types_to_sdb(co.program.dataTypeManager)
+            sdb.to_json(sdb_file)
 
-        nonthunks = get_nonthunks(fm)
-        total_funcs = len(list(get_nonthunks(fm)))
+            with AstDecompiler(co.program, bid, timeout_sec=timeout_sec) as decompiler:
+                nonthunks = co.decompiler.nonthunk_functions
 
-        print(f'Exporting function asts...')
-        for i, func in show_progress(enumerate(nonthunks), total=total_funcs):
-            if max_funcs > -1 and i >= max_funcs:
-                break
+                print(f'Exporting function asts...')
 
-            address = func.getEntryPoint().offset
-            res = ifc.decompileFunction(func, timeout_sec, None)
-            if not res.decompileCompleted():
-                print('Decompilation failed:')
-                print(res.getErrorMessage())
-                failed_decompilations.append(address)
-                continue
+                for i, func in show_progress(enumerate(nonthunks), desc=bin_file.name, total=len(nonthunks)):
+                    if max_funcs > -1 and i >= max_funcs:
+                        break
 
-    # log addresses of failed decompilations
-    if failed_decompilations:
-        with open(export_folder/f'{binaryName}_failed_decompilations.txt', 'w') as faildecomps_file:
-            faildecomps_file.write('\n'.join(f'{addr:x}' for addr in failed_decompilations))
+                    ast = decompiler.decompile_ast(func)
+
+                    if ast is None:
+                        addr_str = f'{func.entryPoint.offset:x}'
+                        if decompiler.last_error_msg:
+                            failed_decompilations.append(addr_str)
+                        else:
+                            failed_ast_exports.append(addr_str)
+                            failed_ast_log.extend([addr_str, decompiler.last_ast_log])
+                        continue
+
+                    # save ast to json
+                    filename = f'Func{func.entryPoint.offset:x}-{func.name}.json'
+                    for ch in "<>:\"/\\|?*":    # sanitize possible bad file chars in function name
+                        filename = filename.replace(ch, '_')
+
+                    with open(export_folder/filename, 'w') as f:
+                        json.dump(ast.to_dict(), f)
+
+        # log addresses of failed decompilations
+        if failed_decompilations:
+            with open(export_folder/f'{binaryName}_failed_decompilations.txt', 'w') as faildecomps_file:
+                faildecomps_file.write('\n'.join(failed_decompilations))
+
+        if failed_ast_exports:
+            with open(export_folder/f'{binaryName}_failed_ast_exports.txt', 'w') as f:
+                f.write('\n'.join(failed_ast_exports))
+            with open(export_folder/f'{binaryName}_failed_ast_export_logs.txt', 'w') as f:
+                f.write('\n'.join(failed_ast_log))
 
     return 0
 
@@ -123,25 +139,12 @@ def do_export_asts(run:Run, params:Dict[str,Any], outputs:Dict[str,Any]):
         with open(ast_config, 'w') as f:
             f.write(json.dumps({'output_folder': str(ast_folder)}))
 
-        decompile_cmdline = [
-            'ghidra_decompile_all', ast_folder,
-            'localhost', repo, ghidra_folder, bin_symlink.name,
-            '--timeout_sec', str(DECOMPILE_TIMEOUT), '--ast-only'
-        ]
+        decompile_all(ast_folder, 'localhost', repo, ghidra_folder, bin_symlink.name,
+                        DECOMPILE_TIMEOUT, ast_only=True)
 
-        with env({'GHIDRA_AST_CONFIG_FILE': str(ast_config)}):
-            # print(f'Running command: {" ".join(str(x) for x in decompile_cmdline)}')
-            rcode = subprocess.call(decompile_cmdline)
-            if rcode != 0:
-                raise Exception(f'Ghidra postscript processing failed with return code {rcode}')
-
-            # move sdb files up to the data folder
-            for sdb_file in ast_folder.glob('*.sdb'):
-                shutil.move(sdb_file, fb.data_folder/sdb_file.name)
-
-# TODO:
-# - move this to ghidralib.wildebeest.export_asts -> RunStep
-# - leave export_ast.export_asts as a python interface we can call from dragon-ryder
+        # move sdb files up to the data folder
+        for sdb_file in ast_folder.glob('*.sdb'):
+            shutil.move(sdb_file, fb.data_folder/sdb_file.name)
 
 def export_asts(debug:bool):
     params = {

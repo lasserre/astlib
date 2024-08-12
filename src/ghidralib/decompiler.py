@@ -30,6 +30,8 @@ def get_decompiler_interface(program:ProgramDB, options:DecompileOptions=None) -
     return ifc
 
 class AstDecompiler:
+    AST_DELIM = '#$#$# BEGIN AST #@#@#'
+
     def __init__(self, program:Program, bid:int=-1, timeout_sec:int=240, options:DecompileOptions=None) -> None:
         '''
         program: The program to be decompiled
@@ -102,7 +104,12 @@ class AstDecompiler:
         self.last_ast_log = ''
 
         res = self.ifc.decompileFunction(func, self.timeout_sec, None)
-        error_msg, ast_json = res.errorMessage.split('#$#$# BEGIN AST #@#@#')
+
+        if AstDecompiler.AST_DELIM in res.errorMessage:
+            error_msg, ast_json = res.errorMessage.split(AstDecompiler.AST_DELIM)
+        else:
+            error_msg = res.errorMessage
+            ast_json = ''
 
         self.last_res = res
         self.last_error_msg = error_msg

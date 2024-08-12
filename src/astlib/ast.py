@@ -680,7 +680,7 @@ class FunctionDecl(ValueDecl):
             **super().to_dict(),
             'name': self.name,
             'address': self.address,
-            'is_instrinsic': self.is_intrinsic,
+            'is_intrinsic': self.is_intrinsic,
             'return_dtype': self.return_dtype.to_dict(),
         }
 
