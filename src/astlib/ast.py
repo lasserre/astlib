@@ -745,7 +745,7 @@ class TranslationUnitDecl(ASTNode):
     @staticmethod
     def from_dict(d:dict, ctx:FromDictContext) -> 'TranslationUnitDecl':
         tudecl = TranslationUnitDecl()
-        tudecl.logfile = d['logfile']
+        tudecl.logfile = d['logfile'] if 'logfile' in d else ''     # for backward-compatibility, before we added 'logfile'
         ctx.tudecl = tudecl     # there is only one translation unit, so we're it!
         tudecl._children_from_dict(d, ctx)
         return tudecl
