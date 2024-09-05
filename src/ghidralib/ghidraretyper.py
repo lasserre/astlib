@@ -39,6 +39,7 @@ from typing import Dict
 # Dictionary to map Caleb's (common) builtin data type strings to Ghidra data type paths
 ghidra_data_type_by_caleb_data_type = {
     'void'          :   '/void',
+    'bool'          :   '/bool',
     'float'         :   '/float',
     'double'        :   '/double',
     'long double'   :   '/float10',

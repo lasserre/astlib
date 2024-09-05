@@ -25,6 +25,9 @@ def _bitfield_to_varlib(gdt:BitFieldDataType, length:int, typedef_name:str=None)
     # we don't recover bitfields, so map these to integers of matching size
     return datatype.BuiltinType(gdt.name, floating_point=False, signed=True, size=gdt.storageSize)
 
+def _boolean_to_varlib(gdt:BooleanDataType, length:int, typedef_name:str=None):
+    return datatype.BuiltinType.create_bool_type()
+
 def _default_to_varlib(gdt:DefaultDataType, length:int, typedef_name:str=None):
     name = typedef_name if typedef_name else gdt.name
     return datatype.BuiltinType(name, False, False, gdt.length)
@@ -83,20 +86,14 @@ def to_varlib_dtype(gdt:DataType, length:int, typedef_name:str=None) -> datatype
                     (if present) so although we compare based on canonical types, we can see the more
                     readable name it had within Ghidra.
     '''
-    if isinstance(gdt, AbstractFloatDataType):
-        return _abstract_float_to_varlib(gdt, length, typedef_name)
-
-    if isinstance(gdt, AbstractIntegerDataType):
-        return _abstract_int_to_varlib(gdt, length, typedef_name)
-
     if isinstance(gdt, Array):
         return _array_to_varlib(gdt, length, typedef_name)
 
     if isinstance(gdt, BitFieldDataType):
         return _bitfield_to_varlib(gdt, length, typedef_name)
 
-    if isinstance(gdt, DefaultDataType):
-        return _default_to_varlib(gdt, length, typedef_name)
+    if isinstance(gdt, BooleanDataType):
+        return _boolean_to_varlib(gdt, length, typedef_name)
 
     if isinstance(gdt, Enum):
         return _enum_to_varlib(gdt, length, typedef_name)
@@ -116,9 +113,6 @@ def to_varlib_dtype(gdt:DataType, length:int, typedef_name:str=None) -> datatype
     if isinstance(gdt, TypeDef):
         return _typedef_to_varlib(gdt, length, typedef_name)
 
-    if isinstance(gdt, Undefined):
-        return _undefined_to_varlib(gdt, length, typedef_name)
-
     if isinstance(gdt, Union):
         return _union_to_varlib(gdt, length, typedef_name)
 
@@ -128,6 +122,21 @@ def to_varlib_dtype(gdt:DataType, length:int, typedef_name:str=None) -> datatype
     if isinstance(gdt, WideCharDataType) or isinstance(gdt, WideChar16DataType) or isinstance(gdt, WideChar32DataType):
         name = typedef_name if typedef_name else gdt.name
         return datatype.BuiltinType(name, floating_point=False, signed=False, size=gdt.length)
+
+    # NOTE: keep the Abstract types last in case they could match a more specific
+    # type above
+
+    if isinstance(gdt, AbstractFloatDataType):
+        return _abstract_float_to_varlib(gdt, length, typedef_name)
+
+    if isinstance(gdt, AbstractIntegerDataType):
+        return _abstract_int_to_varlib(gdt, length, typedef_name)
+
+    if isinstance(gdt, DefaultDataType):
+        return _default_to_varlib(gdt, length, typedef_name)
+
+    if isinstance(gdt, Undefined):
+        return _undefined_to_varlib(gdt, length, typedef_name)
 
     if isinstance(gdt, ghidra.app.plugin.exceptionhandlers.gcc.datatype.DwarfEncodingModeDataType):
         # types we don't care about...

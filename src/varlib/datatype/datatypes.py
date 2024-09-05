@@ -117,6 +117,10 @@ class DataType:
     def is_signed(self) -> bool:
         return False    # default to false
 
+    @property
+    def is_bool(self) -> bool:
+        return False    # default to false
+
     def to_dict(self) -> dict:
         '''Converts the data type into a serializable dict'''
         raise NotImplementedError(f'to_dict not implemented in {self.__class__.__name__}')
@@ -201,7 +205,7 @@ _builtin_type_names = list(chain(
     _builtin_floats_by_name.keys(),
     _builtin_uints_by_name.keys(),
     _builtin_ints_by_name.keys(),
-    ['void']
+    ['void', 'bool']
 ))
 
 class BuiltinType(DataType):
@@ -209,13 +213,15 @@ class BuiltinType(DataType):
     Built-in/primitive types like int, float, long, etc.
 
     void is also considered a built-in type with a size of 0
+    bool is also considered a built-in type with a size of 1
     '''
     def __init__(self, name:str,
-                 floating_point:bool, signed:bool, size:int) -> None:
+                 floating_point:bool, signed:bool, size:int, boolean:bool=False) -> None:
         super().__init__(DataTypeCategories.BuiltIn)
         self.name = name
         self.floating_point = floating_point
         self.signed = signed
+        self.boolean = boolean
         self._size = size
 
     @property
@@ -242,6 +248,10 @@ class BuiltinType(DataType):
     def is_signed(self) -> bool:
         return self.signed
 
+    @property
+    def is_bool(self) -> bool:
+        return self.boolean
+
     @staticmethod
     def get_std_names() -> List[str]:
         '''Returns a list of the recognized built-in type names'''
@@ -263,6 +273,8 @@ class BuiltinType(DataType):
             return BuiltinType(std_name, floating_point=False, signed=False, size=size)
         elif std_name == 'void':
             return BuiltinType.create_void_type()
+        elif std_name == 'bool':
+            return BuiltinType.create_bool_type()
 
         raise Exception(f'{std_name} is not a standard built-in type name')
 
@@ -277,6 +289,8 @@ class BuiltinType(DataType):
         '''
         if self.is_void:
             return 'void'
+        if self.is_bool:
+            return 'bool'
         if self.floating_point:
             return _builtin_floats_by_size[self.size] if self.size in _builtin_floats_by_size else f'UNMAPPED_FLOAT_{self.size}'
         elif self.signed:
@@ -320,15 +334,26 @@ class BuiltinType(DataType):
             return False
         return self.floating_point == other.floating_point and \
             self.signed == other.signed and \
-            self.size == other.size
+            self.size == other.size and \
+            self.boolean == other.boolean
 
     def __hash__(self):
-        return hash((self.floating_point, self.signed, self.size))
+        return hash((self.floating_point, self.signed, self.size, self.boolean))
 
     @staticmethod
     def create_void_type():
         '''Create a new BuiltinType instance that represents the void type'''
         return BuiltinType('void', floating_point=False, signed=False, size=0)
+
+    @staticmethod
+    def create_bool_type():
+        '''
+        Create a new BuiltinType instance that represents the bool type.
+
+        We represent all bool types with this representative 1-byte bool type,
+        whether or not it is actually 1 byte in the binary
+        '''
+        return BuiltinType('bool', floating_point=False, signed=False, size=1, boolean=True)
 
     @property
     def is_void(self) -> bool:
@@ -356,12 +381,19 @@ class BuiltinType(DataType):
             'name': self.name,
             'is_fp': self.floating_point,
             'signed': self.signed,
-            'size': self.size
+            'size': self.size,
+            'boolean': self.boolean
         }
 
     @staticmethod
     def from_dict(d:dict, sdb) -> 'BuiltinType':
-        return BuiltinType(name=d['name'], floating_point=d['is_fp'], signed=d['signed'], size=d['size'])
+        name = d['name']
+
+        # NOTE: tolerate missing 'boolean' key since decompiler does NOT write this
+        # -> if Ghidra decompiler named it 'bool' we treat it as our (single) 1B bool type
+        is_bool = d['boolean'] if 'boolean' in d else (name == 'bool')
+
+        return BuiltinType(name=d['name'], floating_point=d['is_fp'], signed=d['signed'], size=d['size'], boolean=is_bool)
 
 class PointerType(DataType):
     '''

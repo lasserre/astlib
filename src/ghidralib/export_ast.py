@@ -36,7 +36,7 @@ def decompile_all(export_folder:Path, host:str, repo:str, folder:str, binaryName
 
         bin_file = proj.projectData.getFile(f'{folder}/{binaryName}')
         bid = binary_id(bin_file.name)
-        verify_ghidra_revision(bin_file, expected_revision=1, rollback_delete=False)
+        verify_ghidra_revision(bin_file, expected_revision=1, rollback_delete=True)
 
         failed_decompilations = []
         failed_ast_exports = []
