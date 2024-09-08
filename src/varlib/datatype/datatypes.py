@@ -287,13 +287,13 @@ class BuiltinType(DataType):
 
         This facilitates equality comparison using only the string name
         '''
-        if self.is_void:
-            return 'void'
         if self.is_bool:
             return 'bool'
+        if self.is_void:
+            return 'void'
         if self.floating_point:
             return _builtin_floats_by_size[self.size] if self.size in _builtin_floats_by_size else f'UNMAPPED_FLOAT_{self.size}'
-        elif self.signed:
+        if self.signed:
             if self.size not in _builtin_ints_by_size:
                 # same as below...
                 if self.size < 4:
