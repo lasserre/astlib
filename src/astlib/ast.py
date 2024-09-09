@@ -119,17 +119,33 @@ class ASTNode:
 
     @property
     def is_statement(self) -> bool:
-        global _statement_node_kinds, _statement_container_kinds
+        global _statement_node_kinds
         # examples:
         # x = y;
         # my_func();
+
+        return self.kind in _statement_node_kinds
+        # or (self.parent and self.parent.kind in _statement_container_kinds)
+
+    @property
+    def is_statement_container(self) -> bool:
+        '''
+        True if this node is a "statement container" (e.g. IfStmt, WhileStmt, etc.)
+
+        We want to include this node itself, but not gather all of its children into
+        variable graphs to avoid building large graphs of unrelated information
+
+        For example, variables in the if condition are not necessarily related to the code
+        in the if or else blocks, but we still want to see that the variable in the if
+        condition IS inside an if condition!
+        '''
+        global _statement_container_kinds
         # for (i = 0; i < DECLREF; i++)  <-- contains 3 statements (maybe "complete expressions" technically, but this is what we're after)
+        # if (boolvar3) { // if block } else { // else block } <-- contains 3 "statements",
+        #       ...we want to see that we're inside an IfStmt, but we don't want to hop across
+        #       these child statements (cond, if, else)
 
-        return self.kind in _statement_node_kinds or (self.parent and self.parent.kind in _statement_container_kinds)
-
-        # return (self.kind == 'BinaryOperator' and self.opcode == '=') \
-        #     or (self.kind == 'CallExpr' and self.parent and self.parent.kind == 'CompoundStmt') \
-        #     or self.kind in _statement_node_kinds
+        return self.kind in _statement_container_kinds
 
 
     def _children_from_dict(self, d:dict, ctx:FromDictContext):
