@@ -168,7 +168,7 @@ class GhidraRetyper:
             # Length zero means field length determined from data type size
             new_union.add(dtype, 0, field.name, None)
 
-    def set_funcvar_type(self, symbol:HighSymbol, dtype:datatype.DataType):
+    def set_funcvar_type(self, symbol:HighSymbol, dtype:datatype.DataType, name:str=None):
         '''
         Set local or param variable type
         '''
@@ -179,7 +179,7 @@ class GhidraRetyper:
             raise Exception(f'Error: {symbol.getName()} not updated')
 
         # This function throws an exception when attempting to update type of unique variable with different size
-        HighFunctionDBUtil.updateDBVariable(symbol, None, ghidra_dtype, SourceType.USER_DEFINED)
+        HighFunctionDBUtil.updateDBVariable(symbol, name, ghidra_dtype, SourceType.USER_DEFINED)
 
     def set_globalvar_type(self, global_name:int, global_type:datatype.DataType):
         # do this last: I don't have data for globals right now and we may not need them
