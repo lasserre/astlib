@@ -1,5 +1,6 @@
 from .datatypes import *
 from .structlayout import *
+from typing import Iterable, Tuple
 
 class StructTypeBasic(DataType):
     '''
@@ -115,6 +116,43 @@ class StructType(DataType):
     @staticmethod
     def from_dict(d:dict, sdb) -> 'StructType':
         return StructType(sdb, d['sid'], name=d['name'])
+
+    def flatten(self:'StructType', flatten_arrays:bool=False) -> 'StructType':
+        '''
+        Flatten this structure definition and return as a new StructType
+        '''
+        db:'StructDatabase' = self._db
+
+        # to use StructType instances (which greatly simplifies any nested
+        # structures to be flattened), we have to map the flat versions in
+        # the database. These will be mapped as usual in the database and
+        # a mapping from original sid -> flat sid is also added on to the
+        # database (flattened_structs) to maintain a 1-1 mapping from any
+        # sid to its flat version
+
+        if not hasattr(db, 'flattened_structs'):
+            db.flattened_structs = {}   # maps original (non-flat) sid: flattened sid
+
+        if self.name.endswith(':FLAT'):
+            return self    # this is a flattened layout
+
+        if self.sid in db.flattened_structs:
+            return StructType(db, sid=db.flattened_structs[self.sid])
+
+        flat_name = f'{self.name}:FLAT'
+        flat_layout = {}
+
+        for off, field in self.layout.items():
+            field:StructField
+            for flat_off, flat_field in iter_flattened_components(field, flatten_arrays):
+                flat_layout[off + flat_off] = flat_field
+
+        sdef = StructDefinition(flat_name, StructLayout(flat_layout))
+        flat_sid = db.map_struct_type('flat', sdef, is_union=False)
+        db.flattened_structs[flat_sid] = self.sid
+
+        return StructType(db, flat_sid)
+
 
 # NOTE: I think unions should be treated as their own type...
 # since we care so much about offsets in structure recovery,
@@ -233,3 +271,24 @@ class UnionType(DataType):
 from .datatypes import _dt_from_dict_methods
 _dt_from_dict_methods['StructType'] = StructType.from_dict
 _dt_from_dict_methods['UnionType'] = UnionType.from_dict
+
+
+def iter_flattened_components(field:StructField, flatten_arrays) -> Iterable[Tuple[int, StructField]]:
+    '''
+    Flattens the data type, returning an iterable of flattened atomic fields
+    and their offsets relative to dtype. Composite types will be broken down into atomic
+    elements, while basic types will remain unchanged
+
+    Returns an iterable of (offset, type, name)
+    '''
+    if isinstance(field.dtype, StructType):
+        for off, nested_field in field.dtype.layout.items():
+            for flat_off, flat_field in iter_flattened_components(nested_field, flatten_arrays):
+                yield (off + flat_off, StructField(flat_field.dtype, f'{field.name}:{flat_field.name}'))
+    elif isinstance(field.dtype, ArrayType) and flatten_arrays:
+        for i in range(field.dtype.num_elements):
+            arr_element_field = StructField(field.dtype.element_type, f'{field.name}:{i}')
+            for flat_off, flat_field in iter_flattened_components(arr_element_field, flatten_arrays):
+                yield (i*field.dtype.element_type.size + flat_off, flat_field)
+    else:
+        yield (0, field)
