@@ -1,3 +1,3 @@
 from .datatypes import *
 from .structtype import StructType, UnionType, StructLayout, UnionLayout, StructDefinition, UnionDefinition, StructField
-from .structtype import StructTypeBasic, UnionTypeBasic, find_nested_structures
+from .structtype import StructTypeBasic, UnionTypeBasic
