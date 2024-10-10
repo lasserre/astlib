@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import List, Dict, Iterable, Callable, Any, Set
 
 from .datatype.structlayout import StructDefinition, UnionDefinition, StructLayout, UnionLayout
+from .datatype.structtype import StructType, UnionType
 
 # NOTE: we avoid recursion by MAPPING a new structure type in the database
 # even before we finish defining its fields
@@ -32,6 +33,16 @@ class StructDatabase:
         self.sids_by_name:Dict[str, List[int]] = {}             # maps name: list of sids with this name
         self.sid_by_tu_and_name:Dict[tuple, int] = {}             # maps (tuid, name): sid
         self._next_sid = 0
+
+    @property
+    def struct_types(self) -> Dict[int, StructType]:
+        '''Dictionary mapping sid to StructType for each struct in the database'''
+        return {sid: StructType(self, sid) for sid in self.structs_by_id}
+
+    @property
+    def union_types(self) -> Dict[int, UnionType]:
+        '''Dictionary mapping sid to UnionType for each union in the database'''
+        return {sid: UnionType(self, sid) for sid in self.unions_by_id}
 
     def to_dict(self) -> Dict[int, dict]:
         '''
@@ -153,3 +164,9 @@ class StructDatabase:
             self.sids_by_name[sdef.name].append(new_sid)
 
         return new_sid
+
+    def find_nested_structures(self) -> List[StructType]:
+        '''
+        Returns a list of structures in this database which have nested structures within them
+        '''
+        return [stype for stype in self.struct_types.values() if stype.nested_structs]

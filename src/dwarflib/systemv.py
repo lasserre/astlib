@@ -45,7 +45,7 @@ def has_unaligned_fields(st:StructType):
     # "contains unaligned fields" I THINK means that any of the fields
     # are not 8-byte aligned
     # TODO: test this out and confirm
-    for offset in st.fields_by_offset.keys():
+    for offset in st.layout:
         if offset % 8 != 0:
             return True
     return False
@@ -96,7 +96,7 @@ def type_to_argclass(dt:DataType) -> ArgClass:
             # TODO: pick up here...looks like basically if anything is MEMORY
             # it "taints" the whole structure to be in memory... (remember these are small structs)
             # - make this simple, test it out...try and catch the various cases and spot check
-            for offset, field in dt.fields_by_offset.items():
+            for offset, field in dt.layout.items():
                 field_argclass = type_to_argclass(field.dtype)
                 # if field.size
 

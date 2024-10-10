@@ -53,11 +53,6 @@ class StructLayout(dict):
     def __init__(self, *arg, **kw):
         super(StructLayout, self).__init__(*arg, **kw)
 
-    @property
-    def fields_by_offset(self) -> Dict[int, StructField]:
-        # only for backwards-compatibility :)
-        return self
-
     def __eq__(self, other, dtchain:List[str]=None):
         '''
         NOTE: breaking StructLayout out as its own class separate from StructDefinition

@@ -31,7 +31,7 @@ class StructType(DataType):
         True if this structure has no content defined
         (e.g. is a forward declaration)
         '''
-        return not bool(self.fields_by_offset)
+        return not bool(self.layout)
 
     @property
     def name(self):
@@ -63,14 +63,8 @@ class StructType(DataType):
         return -1
 
     @property
-    def fields_by_offset(self) -> Dict[int, StructField]:
-        '''A dictionary mapping field offsets to their StructField definitions'''
-        layout = self.layout
-        return layout.fields_by_offset if layout else {}
-
-    @property
     def size(self):
-        return sum(f.size for f in self.fields_by_offset.values())
+        return sum(f.size for f in self.layout.values())
 
     @property
     def type_sequence_str(self) -> str:
@@ -153,6 +147,15 @@ class StructType(DataType):
 
         return StructType(db, flat_sid)
 
+    @property
+    def nested_structs(self) -> List['StructType']:
+        nested_structs = []
+        if self.layout:
+            for field in self.layout.values():
+                field:StructField
+                if isinstance(field.dtype, StructType):
+                    nested_structs.append(StructType(self._db, field.dtype.sid))
+        return nested_structs
 
 # NOTE: I think unions should be treated as their own type...
 # since we care so much about offsets in structure recovery,
@@ -292,3 +295,4 @@ def iter_flattened_components(field:StructField, flatten_arrays) -> Iterable[Tup
                 yield (i*field.dtype.element_type.size + flat_off, flat_field)
     else:
         yield (0, field)
+

@@ -497,7 +497,7 @@ class MemberExpr(ASTNode):
     @property
     def dtype(self) -> DataType:
         if self.parent_struct:
-            return self.parent_struct.layout.fields_by_offset[self.offset].dtype
+            return self.parent_struct.layout[self.offset].dtype
         elif self.parent_union:
             # have to match union field by name
             return [f for f in self.parent_union.layout.fields if f.name == self.name][0].dtype
