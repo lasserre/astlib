@@ -1,4 +1,5 @@
 import itertools
+from itertools import takewhile
 import json
 import sys, inspect
 from pathlib import Path
@@ -83,6 +84,20 @@ class ASTNode:
         from .astviewer import ASTViewer
         return ASTViewer(format_node).render_ast(self, format, outfolder, ast_name, fontname)
 
+    def print(self, header_only:bool=False, validation_mode:bool=False, use_struct_typedefs:bool=True):
+        '''
+        Print the C code rendering of this AST to a string
+        '''
+        print(self.c_code_str(header_only, validation_mode, use_struct_typedefs))
+
+    def c_code_str(self, header_only:bool=False, validation_mode:bool=False, use_struct_typedefs:bool=True) -> str:
+        '''
+        Convert this AST node into a C code string
+        '''
+        from .astprinter import PrintASTVisitor
+        return PrintASTVisitor(header_only, validation_mode=validation_mode,
+                                use_struct_typedefs=use_struct_typedefs).convert_ast_to_code(self)
+
     # now node.dtype can print itself...
     # def dtype_str(self):
     #     return DatatypePrinter().to_string(self)
@@ -110,7 +125,8 @@ class ASTNode:
     def nodes_at_addr(self, addr:int) -> List['ASTNode']:
         return GetNodesAtAddr(addr).visit(self)
 
-    def get_fdecl(self) -> 'FunctionDecl':
+    @property
+    def fdecl(self) -> 'FunctionDecl':
         '''Locate the FunctionDecl for this function AST'''
         root = self.find_root_node()
         if root.kind != 'TranslationUnitDecl':

@@ -143,7 +143,7 @@ class StructType(DataType):
 
         sdef = StructDefinition(flat_name, StructLayout(flat_layout))
         flat_sid = db.map_struct_type('flat', sdef, is_union=False)
-        db.flattened_structs[flat_sid] = self.sid
+        db.flattened_structs[self.sid] = flat_sid
 
         return StructType(db, flat_sid)
 

@@ -26,7 +26,7 @@ def export_func_vars(decompiler:AstDecompiler, func:Function, bid:int=-1) -> pd.
     locals and parameters of the given function.
     '''
     tudecl = decompiler.decompile_ast(func)
-    fdecl = tudecl.get_fdecl()
+    fdecl = tudecl.fdecl
     func_vars = fdecl.params + fdecl.local_vars
 
     # find all refs & compute signatures

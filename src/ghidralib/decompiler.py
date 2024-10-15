@@ -5,7 +5,7 @@ if typing.TYPE_CHECKING:
 
 # CLS: this should only be imported if pyhidra has been started
 
-from typing import List, Dict
+from typing import List, Dict, Tuple
 import pandas as pd
 from tqdm import tqdm
 
@@ -16,7 +16,7 @@ from ghidra.program.model.listing import FunctionManager, Function, Program
 from ghidra.program.model.data import DataTypeManager
 from ghidra.program.model.pcode import HighSymbol
 
-from astlib import TranslationUnitDecl, FindAllVarRefs, compute_var_ast_signature, build_varid, get_vartype, read_json_str
+from astlib import TranslationUnitDecl, read_json_str, build_var_ast_signature, VarDecl
 from varlib import StructDatabase
 from .export_types import export_ghidra_types_to_sdb
 
@@ -127,3 +127,15 @@ class AstDecompiler:
         tudecl = read_json_str(ast_json, sdb=sdb)
         self.last_ast_log = tudecl.logfile
         return tudecl if not self.last_ast_log else None
+
+    def decompile_and_extract_signatures(self, func:Function, sdb:StructDatabase=None) -> Tuple[TranslationUnitDecl, Dict[str, VarDecl]]:
+        '''
+        Decompiles the function and builds variable signatures for each parameter and local in the function
+
+        Returns a tuple of (decompiled AST, var_signatures) where var_signatures is a dictionary mapping
+        variable signature to the corresponding VarDecl
+        '''
+        ast = self.decompile_ast(func, sdb)
+        func_vars = ast.fdecl.params + ast.fdecl.local_vars
+        vars_by_sig = {build_var_ast_signature(ast.fdecl, v.name): v for v in func_vars}
+        return (ast, vars_by_sig)
