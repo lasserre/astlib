@@ -31,7 +31,7 @@ class StructDatabase:
         self.structs_by_id:Dict[int, StructDefinition] = {}     # maps sid: StructDefinition
         self.unions_by_id:Dict[int, UnionDefinition] = {}       # maps sid: UnionDefinition
         self.sids_by_name:Dict[str, List[int]] = {}             # maps name: list of sids with this name
-        self.sid_by_tu_and_name:Dict[tuple, int] = {}             # maps (tuid, name): sid
+        self.sid_by_tu_and_name:Dict[str, Dict[str,int]] = {}             # maps (tuid, name): sid
         self._next_sid = 0
 
     @property
@@ -118,8 +118,9 @@ class StructDatabase:
 
         ASSUMES struct and union ids are all unique from each other (no struct id will overlap a union id)
         '''
-        if (tuid, name) in self.sid_by_tu_and_name:
-            return self.sid_by_tu_and_name[(tuid, name)]
+        if tuid in self.sid_by_tu_and_name:
+            if name in self.sid_by_tu_and_name[tuid]:
+                return self.sid_by_tu_and_name[tuid][name]
         return -1   # not mapped
 
     def map_struct_type_empty(self, tuid:str, name:str, is_class:bool=False) -> int:
@@ -155,7 +156,9 @@ class StructDatabase:
             self.structs_by_id[new_sid] = sdef
 
         # 2) map the sid inside its translation unit (tuid/name)
-        self.sid_by_tu_and_name[(tuid, sdef.name)] = new_sid
+        if tuid not in self.sid_by_tu_and_name:
+            self.sid_by_tu_and_name[tuid] = {}
+        self.sid_by_tu_and_name[tuid][sdef.name] = new_sid
 
         # 3) add the name to our lookup by struct name
         if sdef.name not in self.sids_by_name:
