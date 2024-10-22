@@ -159,7 +159,7 @@ def get_record_type_from_die(die:DIE, name:str, is_union:bool, is_class:bool=Fal
     # tuid = ''   # try without differentiating by TU
     tuid = die.cu.get_top_DIE().name
 
-    sid = _struct_db.get_sid(tuid, name) if name else -1    # we can't look up anonymous unions/structs by name
+    sid = _struct_db.get_sid(tuid, name, is_union) if name else -1    # we can't look up anonymous unions/structs by name
 
     if name == '':
         # these will all collide in name for now, but otherwise anonymous types cause errors

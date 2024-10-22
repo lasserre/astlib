@@ -32,6 +32,8 @@ class StructDatabase:
         self.unions_by_id:Dict[int, UnionDefinition] = {}       # maps sid: UnionDefinition
         self.sids_by_name:Dict[str, List[int]] = {}             # maps name: list of sids with this name
         self.sid_by_tu_and_name:Dict[str, Dict[str,int]] = {}             # maps (tuid, name): sid
+        self.uid_by_tu_and_name:Dict[str, Dict[str,int]] = {}             # maps (tuid, name): uid
+        # (only because gdb proved you can have name collisions within a translation unit)
         self._next_sid = 0
 
     @property
@@ -56,7 +58,8 @@ class StructDatabase:
                 sid: udef.to_dict() for sid, udef in self.unions_by_id.items()
             },
             'sids_by_name': self.sids_by_name,
-            'sid_by_tu_and_name': self.sid_by_tu_and_name
+            'sid_by_tu_and_name': self.sid_by_tu_and_name,
+            'uid_by_tu_and_name': self.uid_by_tu_and_name,
         }
 
     @staticmethod
@@ -77,6 +80,8 @@ class StructDatabase:
 
         if 'sid_by_tu_and_name' in d:
             sdb.sid_by_tu_and_name = d['sid_by_tu_and_name']
+        if 'uid_by_tu_and_name' in d:
+            sdb.uid_by_tu_and_name = d['uid_by_tu_and_name']
 
         # idk that we need it, but reset this so if we add a new struct its ready to go
         max_struct_id = max(sdb.structs_by_id.keys()) + 1
@@ -111,16 +116,17 @@ class StructDatabase:
     def _is_union_id(self, uid:int) -> bool:
         return uid in self.unions_by_id
 
-    def get_sid(self, tuid:str, name:str) -> int:
+    def get_sid(self, tuid:str, name:str, is_union:bool=False) -> int:
         '''
         Returns the sid for the named struct or union within this translation unit if it has
         been mapped. Returns -1 if this struct is not in the database
 
         ASSUMES struct and union ids are all unique from each other (no struct id will overlap a union id)
         '''
-        if tuid in self.sid_by_tu_and_name:
-            if name in self.sid_by_tu_and_name[tuid]:
-                return self.sid_by_tu_and_name[tuid][name]
+        lookup_dict = self.uid_by_tu_and_name if is_union else self.sid_by_tu_and_name
+        if tuid in lookup_dict:
+            if name in lookup_dict[tuid]:
+                return lookup_dict[tuid][name]
         return -1   # not mapped
 
     def map_struct_type_empty(self, tuid:str, name:str, is_class:bool=False) -> int:
@@ -156,9 +162,10 @@ class StructDatabase:
             self.structs_by_id[new_sid] = sdef
 
         # 2) map the sid inside its translation unit (tuid/name)
-        if tuid not in self.sid_by_tu_and_name:
-            self.sid_by_tu_and_name[tuid] = {}
-        self.sid_by_tu_and_name[tuid][sdef.name] = new_sid
+        lookup_dict = self.uid_by_tu_and_name if is_union else self.sid_by_tu_and_name
+        if tuid not in lookup_dict:
+            lookup_dict[tuid] = {}
+        lookup_dict[tuid][sdef.name] = new_sid
 
         # 3) add the name to our lookup by struct name
         if sdef.name not in self.sids_by_name:

@@ -69,9 +69,10 @@ def decompile_all(export_folder:Path, host:str, repo:str, folder:str, binaryName
                         continue
 
                     # save ast to json
-                    filename = f'Func{func.entryPoint.offset:x}-{func.name}.json'
+                    filename = f'Func{func.entryPoint.offset:x}-{func.name}'[:175]  # limit to first 175 characters to avoid "filename too long" exception
                     for ch in "<>:\"/\\|?*":    # sanitize possible bad file chars in function name
                         filename = filename.replace(ch, '_')
+                    filename += '.json'
 
                     with open(export_folder/filename, 'w') as f:
                         json.dump(ast.to_dict(), f)
