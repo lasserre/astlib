@@ -69,6 +69,12 @@ def binary_id(binary_name:str) -> int:
     '''
     return int(binary_name.split('.')[0])
 
+def run_id(binary_parent_folder:str) -> int:
+    '''
+    Extracts the run ID from the name of the parent folder of a binary file in Ghidra
+    '''
+    return int(binary_parent_folder.split('.')[0][3:])
+
 def build_varid(bid:int, func_addr:int, var_signature:str, vartype:str) -> tuple:
     '''
     Builds the varid tuple (just a memory aid so I don't miss information)

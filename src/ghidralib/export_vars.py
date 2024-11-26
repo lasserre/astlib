@@ -56,10 +56,21 @@ def export_debug_vars(proj:GhidraProject, debug_files:List[DomainFile], limit_fu
     # the reason to make this debug-specific is because we only care about
     # the data types - we don't need to export the ASTs themselves
     bin_vdfs = []
+
+    # remap BinaryId to ensure uniqueness across runs (OrigBinaryId/RunId maps new id to original)
+    base_gid = 1000
+
     for i, debug_file in enumerate(debug_files):
-        bid = binary_id(debug_file.name)
+        orig_bid = binary_id(debug_file.name)
+        rid = run_id(debug_file.parent.name)
+        bid = base_gid + i      # unique id
+
         with GhidraCheckoutProgram(proj, debug_file, bid=bid) as co:
             nonthunks = co.decompiler.nonthunk_functions[:limit_funcs]
-            bin_vdfs.append(export_vars(co.decompiler, nonthunks, bid))
+            vdf = export_vars(co.decompiler, nonthunks, bid)
+            # save mapping to original runid/bid
+            vdf['OrigBinaryId'] = orig_bid
+            vdf['RunId'] = rid
+            bin_vdfs.append(vdf)
 
     return pd.concat(bin_vdfs).reset_index(drop=True)
