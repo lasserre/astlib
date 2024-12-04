@@ -61,6 +61,7 @@ def export_debug_vars(proj:GhidraProject, debug_files:List[DomainFile], limit_fu
     base_gid = 1000
 
     for i, debug_file in enumerate(debug_files):
+        binary_name = original_binary_name(debug_file.parent.name)
         orig_bid = binary_id(debug_file.name)
         rid = run_id(debug_file.parent.name)
         bid = base_gid + i      # unique id
@@ -69,6 +70,7 @@ def export_debug_vars(proj:GhidraProject, debug_files:List[DomainFile], limit_fu
             nonthunks = co.decompiler.nonthunk_functions[:limit_funcs]
             vdf = export_vars(co.decompiler, nonthunks, bid)
             # save mapping to original runid/bid
+            vdf['Binary'] = binary_name
             vdf['OrigBinaryId'] = orig_bid
             vdf['RunId'] = rid
             bin_vdfs.append(vdf)

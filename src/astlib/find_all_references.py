@@ -69,6 +69,20 @@ def binary_id(binary_name:str) -> int:
     '''
     return int(binary_name.split('.')[0])
 
+def original_binary_name(parent_folder_name:str) -> str:
+    '''
+    Extracts the original binary name from the name of the parent folder
+    in Ghidra
+
+    NOTE: this is a hacky workaround for an issue with .so files getting renamed
+    to .debug and losing the .so extension. The current implementation
+    that imports binaries into Ghidra preserves the original filename within the
+    name of the parent folder, so I'm grabbing that to avoid having to re-generate
+    the Ghidra databases
+    '''
+    # parent folder name format: "runX.X.<binary_name>."
+    return '.'.join(parent_folder_name.split('.')[2:-1])
+
 def run_id(binary_parent_folder:str) -> int:
     '''
     Extracts the run ID from the name of the parent folder of a binary file in Ghidra
