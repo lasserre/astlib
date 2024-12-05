@@ -21,13 +21,17 @@ from .systemv import *
 
 GHIDRA_ELF_IMAGE_BASE_DEFAULT_x64 = 0x100000
 
+_is_pie_executable = False
+
 def ghidra_to_dwarf_addr(ghidra_addr:int):
     '''Adjust for Ghidra's default image base'''
     return ghidra_addr - GHIDRA_ELF_IMAGE_BASE_DEFAULT_x64
 
 def dwarf_to_ghidra_addr(dwarf_addr:int):
     '''Adjust for Ghidra's default image base'''
-    return dwarf_addr + GHIDRA_ELF_IMAGE_BASE_DEFAULT_x64
+    global _is_pie_executable
+    # only add the ghidra image base offset if it's a PIE executable
+    return dwarf_addr + GHIDRA_ELF_IMAGE_BASE_DEFAULT_x64 if _is_pie_executable else dwarf_addr
 
 # Foo.b = property(lambda self: self.a + 1)
 def die_property(attr_name:str, default_value:Any):
@@ -216,6 +220,7 @@ _basetype_encoding_to_tuple = {
     6: (False, True),   # DW_ATE_signed_char
     7: (False, False),  # DW_ATE_unsigned
     8: (False, False),  # DW_ATE_unsigned_char
+    16: (False, True),  # DW_ATE_UTF - treat these like "bigger" char's (short, int32, ... bigger signed integers)
 }
 
 def getDwarfBaseTypeEncodingAttrs(DW_ATE_encoding:int):
@@ -225,6 +230,7 @@ def getDwarfBaseTypeEncodingAttrs(DW_ATE_encoding:int):
     e.g. input of 8 corresponds to DW_ATE_unsigned_char and returns (False, False)
     '''
     if DW_ATE_encoding not in _basetype_encoding_to_tuple:
+        # import IPython; IPython.embed()
         raise Exception(f'Unrecognized DWARF base type encoding value: {DW_ATE_encoding}')
 
     return _basetype_encoding_to_tuple[DW_ATE_encoding]
@@ -504,8 +510,9 @@ _LANG_TO_NAME = {
 }
 
 class DwarfDebugInfo:
-    def __init__(self, dwarf:DWARFInfo) -> None:
+    def __init__(self, dwarf:DWARFInfo, is_pie:bool) -> None:
         self.dwarf = dwarf
+        self.is_pie = is_pie    # true if this is a position-independent exe or a shared object
         self.funcdies_by_addr:Dict[int,DIE] = {}
         # multilevel dict maps (file:str, line:int, col:int) triples -> address:int
         self.lineinfo_lookup:Dict[tuple, int] = {}
@@ -515,10 +522,14 @@ class DwarfDebugInfo:
         # don't call _build_lineinfo_lookup() in case we don't need it
 
     @staticmethod
-    def is_PIE_exe_or_sharedobj(elf_file:Path) -> bool:
+    def is_exe_or_sharedobj(elf_file:Path) -> bool:
         with open(elf_file, 'rb') as f:
             ef = ELFFile(f)
-            return ef.structs.e_type == 'ET_DYN'
+            return ef.structs.e_type == 'ET_DYN' or ef.structs.e_type == 'ET_EXEC'
+
+    @staticmethod
+    def is_PIE_or_sharedobj(elf:ELFFile) -> bool:
+        return elf.structs.e_type == 'ET_DYN'
 
     @staticmethod
     def fromElf(elf_file:Path) -> 'DwarfDebugInfo':
@@ -527,11 +538,10 @@ class DwarfDebugInfo:
         '''
         with open(elf_file, 'rb') as f:
             ef = ELFFile(f)
-            if ef.structs.e_type != 'ET_DYN':
-                raise Exception(f'Need to handle potential non-PIE e_type "{ef.structs.e_type}" for {elf_file}')
             dwarf = ef.get_dwarf_info()
-            init_pyelftools_from_dwarf(dwarf)
-        return DwarfDebugInfo(dwarf)
+            is_pie = DwarfDebugInfo.is_PIE_or_sharedobj(ef)
+            init_pyelftools_from_dwarf(dwarf, is_pie)
+        return DwarfDebugInfo(dwarf, is_pie)
 
     def _build_funcdies_by_addr(self):
         for fdie in self.get_function_dies():
@@ -627,7 +637,7 @@ class DwarfDebugInfo:
         matches = [f for f in self.get_function_dies() if f.namebytes.decode() == function_name]
         return matches[0] if matches else None
 
-def init_pyelftools_from_dwarf(dwarf:DWARFInfo):
+def init_pyelftools_from_dwarf(dwarf:DWARFInfo, is_pie:bool):
     '''
     Call this first to work aroudn a pyelftools bug
 
@@ -636,6 +646,13 @@ def init_pyelftools_from_dwarf(dwarf:DWARFInfo):
     -> quick fix: just set this manually to match current DWARF info
     before dumping anything
     '''
+    global _is_pie_executable
+
+    # CLS: piggybacking on the fact we already have to init pyelftools' global
+    # state - set our "is_pie" state globally at the same time here
+    # obviously a hack, but this will work with minimal code changes for now
+    _is_pie_executable = is_pie
+
     from elftools.dwarf.descriptions import _MACHINE_ARCH
     from elftools.dwarf.descriptions import set_global_machine_arch
     set_global_machine_arch(dwarf.config.machine_arch)
