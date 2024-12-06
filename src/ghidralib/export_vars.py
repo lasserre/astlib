@@ -25,7 +25,16 @@ def export_func_vars(decompiler:AstDecompiler, func:Function, bid:int=-1) -> pd.
     Exports a table describing the AST variables and their data types for the
     locals and parameters of the given function.
     '''
+    columns = [
+        'BinaryId','FunctionStart','Signature','Vartype','Name','Location','Type','TypeJson',
+    ]
+
     tudecl = decompiler.decompile_ast(func)
+
+    if not tudecl:
+        # failed to decompile - return empty dataframe
+        return pd.DataFrame.from_records([], columns=columns)
+
     fdecl = tudecl.fdecl
     func_vars = fdecl.params + fdecl.local_vars
 
@@ -36,9 +45,8 @@ def export_func_vars(decompiler:AstDecompiler, func:Function, bid:int=-1) -> pd.
 
     # save data in table form and return
     rows = [[*varids[i], v.name, v.location, v.dtype, v.dtype.to_json()] for i, v in enumerate(func_vars)]
-    return pd.DataFrame.from_records(rows, columns=[
-        'BinaryId','FunctionStart','Signature','Vartype','Name','Location','Type','TypeJson',
-    ])
+
+    return pd.DataFrame.from_records(rows, columns=columns)
 
 def export_vars(decompiler:AstDecompiler, func_list:List[Function], bid:int=-1) -> pd.DataFrame:
     '''
