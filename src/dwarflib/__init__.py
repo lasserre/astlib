@@ -621,6 +621,9 @@ class DwarfDebugInfo:
     def get_function_locals(self, func:DIE):
         return list(self.extract_variables_from_die_tree(func))
 
+    def get_typedef_dies(self) -> List[DIE]:
+        return [d for cu in self.dwarf.iter_CUs() for d in cu.iter_DIEs() if d.tag == 'DW_TAG_typedef']
+
     def extract_variables_from_die_tree(self, die:DIE) -> Generator[DIE,None,None]:
         '''
         Recursively extracts all DW_TAG_variable instances nested below
