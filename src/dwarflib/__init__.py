@@ -319,6 +319,8 @@ def to_varlib_dtype(self:DIE, typedef_name:str='', typename_basic:bool=False):
     elif self.type_die.tag == 'DW_TAG_unspecified_type':
         if self.type_die.name == 'decltype(nullptr)':
             return PointerType(BuiltinType.create_void_type(), self.type_die.byte_size)
+        print(f'Returning None for DW_TAG_unspecified_type {self.type_die.name}')
+        return None
 
     raise Exception(f'UNHANDLED type_die tag: {self.type_die.tag}')
     # print(f'UNHANDLED type_die tag: {self.type_die.tag}')

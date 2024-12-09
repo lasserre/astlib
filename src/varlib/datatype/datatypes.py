@@ -292,7 +292,13 @@ class BuiltinType(DataType):
         if self.is_void:
             return 'void'
         if self.floating_point:
-            return _builtin_floats_by_size[self.size] if self.size in _builtin_floats_by_size else f'UNMAPPED_FLOAT_{self.size}'
+            if self.size in _builtin_floats_by_size:
+                return _builtin_floats_by_size[self.size]
+            elif self.size == 16:
+                # don't map 16 -> long double in _builtin_floats_by_size to keep the size/name lookup 1-1,
+                # but allow for 16B/10B floats to both be treated as long doubles here
+                return 'long double'
+            return f'UNMAPPED_FLOAT_{self.size}'
         if self.signed:
             if self.size not in _builtin_ints_by_size:
                 # same as below...
