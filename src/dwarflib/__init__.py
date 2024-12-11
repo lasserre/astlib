@@ -512,7 +512,7 @@ _LANG_TO_NAME = {
 }
 
 class DwarfDebugInfo:
-    def __init__(self, dwarf:DWARFInfo, is_pie:bool) -> None:
+    def __init__(self, dwarf:DWARFInfo, is_pie:bool, c_cpp_only:bool=True) -> None:
         self.dwarf = dwarf
         self.is_pie = is_pie    # true if this is a position-independent exe or a shared object
         self.funcdies_by_addr:Dict[int,DIE] = {}
@@ -520,7 +520,7 @@ class DwarfDebugInfo:
         self.lineinfo_lookup:Dict[tuple, int] = {}
         # self.lineinfo_lookup:Dict[Dict[str,Dict[int,Dict[int,int]]]] = {}
 
-        self._build_funcdies_by_addr()
+        self._build_funcdies_by_addr(c_cpp_only)
         # don't call _build_lineinfo_lookup() in case we don't need it
 
     @staticmethod
@@ -534,7 +534,7 @@ class DwarfDebugInfo:
         return elf.structs.e_type == 'ET_DYN'
 
     @staticmethod
-    def fromElf(elf_file:Path) -> 'DwarfDebugInfo':
+    def fromElf(elf_file:Path, c_cpp_only:bool=True) -> 'DwarfDebugInfo':
         '''
         Create a new DwarfDebugInfo instance from the path to an ELF executable
         '''
@@ -543,10 +543,10 @@ class DwarfDebugInfo:
             dwarf = ef.get_dwarf_info()
             is_pie = DwarfDebugInfo.is_PIE_or_sharedobj(ef)
             init_pyelftools_from_dwarf(dwarf, is_pie)
-        return DwarfDebugInfo(dwarf, is_pie)
+        return DwarfDebugInfo(dwarf, is_pie, c_cpp_only)
 
-    def _build_funcdies_by_addr(self):
-        for fdie in self.get_function_dies():
+    def _build_funcdies_by_addr(self, c_cpp_only:bool=True):
+        for fdie in self.get_function_dies(c_cpp_only=c_cpp_only):
             if fdie.low_pc is not None:
                 self.funcdies_by_addr[fdie.low_pc] = fdie
             # else:
@@ -580,7 +580,7 @@ class DwarfDebugInfo:
                 # THIS WOULD BE AWESOME - more sure we're looking at the correct
                 # AST node...
 
-    def get_function_dies(self, cu_list:List[CompileUnit]=None) -> List[DIE]:
+    def get_function_dies(self, cu_list:List[CompileUnit]=None, c_cpp_only:bool=True) -> List[DIE]:
         '''
         If cu_list is None then all cu's will be included
         '''
@@ -602,7 +602,7 @@ class DwarfDebugInfo:
             constants.DW_LANG_C_plus_plus_14,
         ]
 
-        filtered_cu_list = [cu for cu in cu_list if cu.get_top_DIE().language in lang_list]
+        filtered_cu_list = [cu for cu in cu_list if cu.get_top_DIE().language in lang_list] if c_cpp_only else cu_list
 
         if len(filtered_cu_list) < len(cu_list):
             skipped_langs = [cu.get_top_DIE().language for cu in cu_list if cu not in filtered_cu_list]
