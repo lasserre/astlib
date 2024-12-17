@@ -131,10 +131,14 @@ class UseStructDatabase:
 
 def offset_from_memberDIE(mdie:DIE) -> int:
     KEY = 'DW_AT_data_member_location'
-    return mdie.attributes[KEY].value if KEY in mdie.attributes else 0
+    offset = mdie.attributes[KEY].value if KEY in mdie.attributes else 0
+    # -1 indicates we encountered a location description, which describes the actual location
+    # of this member (for some specific variable) and not its general offset (see DWARF4.pdf pg. 88)
+    # right now we don't support this, so return -1 to indicate no offset
+    return offset if isinstance(offset, int) else -1
 
 def memberDIE_to_varlib(mdie:DIE):
-    return (offset_from_memberDIE(mdie), StructField(dtype=to_varlib_dtype(mdie), name=mdie.name))
+    return (offset_from_memberDIE(mdie), StructField(dtype=die_to_dtype(mdie.type_die), name=mdie.name))
 
 def get_layout_from_structDIE(sdie:DIE) -> StructLayout:
     '''
@@ -147,11 +151,11 @@ def get_layout_from_unionDIE(udie:DIE) -> UnionLayout:
     return UnionLayout([memberDIE_to_varlib(mdie)[1] for mdie in udie.iter_children() if mdie.tag == 'DW_TAG_member'])
 
 def get_fllayout_for_struct(sdie:DIE) -> Dict[int, str]:
-    return {offset_from_memberDIE(mdie): to_varlib_dtype(mdie, typename_basic=True).typename_basic  \
+    return {offset_from_memberDIE(mdie): die_to_dtype(mdie.type_die, typename_basic=True).typename_basic  \
                      for mdie in sdie.iter_children() if mdie.tag == 'DW_TAG_member'}
 
 def get_fllayout_for_union(udie:DIE) -> Set[str]:
-    return set(to_varlib_dtype(mdie, typename_basic=True).typename_basic for mdie in udie.iter_children() if mdie.tag == 'DW_TAG_member')
+    return set(die_to_dtype(mdie.type_die, typename_basic=True).typename_basic for mdie in udie.iter_children() if mdie.tag == 'DW_TAG_member')
 
 def structDIE_to_varlib(sdie:DIE, name:str, is_class:bool=False):
     return get_record_type_from_die(sdie, name, is_union=False, is_class=is_class)
@@ -235,10 +239,10 @@ def getDwarfBaseTypeEncodingAttrs(DW_ATE_encoding:int):
 
     return _basetype_encoding_to_tuple[DW_ATE_encoding]
 
-def get_typename(self:DIE):
-    if not self.type_die.name and self.tag == 'DW_TAG_typedef':
-        return self.name    # use the typedef name if child doesn't have one
-    return self.type_die.name
+def get_typename(self:DIE, typedef_name:str=''):
+    if not self.name and typedef_name:
+        return typedef_name    # use the typedef name if child doesn't have one
+    return self.name
 
 _qualifier_tags = [
     'DW_TAG_const_type',
@@ -254,29 +258,28 @@ def _get_array_nelems_from_subrange(srdie:DIE):
     else:
         return None   # unknown size
 
-def to_varlib_dtype(self:DIE, typedef_name:str='', typename_basic:bool=False):
-    if self.type_die is None:
-        return BuiltinType.create_void_type()
+# to_varlib_dtype(self) becomes die_to_dtype(self.type_die) if type_die else None
 
-    if self.type_die.tag == 'DW_TAG_typedef' or self.type_die.tag in _qualifier_tags:
+def die_to_dtype(self:DIE, typedef_name:str='', typename_basic:bool=False) -> DataType:
+    if self.tag == 'DW_TAG_typedef' or self.tag in _qualifier_tags:
         # resolve to canonical type
-        return to_varlib_dtype(self.type_die, self.type_die.name, typename_basic)
-    elif self.type_die.tag == 'DW_TAG_structure_type' or self.type_die.tag == 'DW_TAG_class_type':
-        name = get_typename(self)
+        return die_to_dtype(self.type_die, self.name, typename_basic) if self.type_die is not None else BuiltinType.create_void_type()
+    elif self.tag == 'DW_TAG_structure_type' or self.tag == 'DW_TAG_class_type':
+        name = get_typename(self, typedef_name)
         # support gathering C++ class structure layouts
-        is_class=self.type_die.tag == 'DW_TAG_class_type'
-        stype = StructTypeBasic(name) if typename_basic else structDIE_to_varlib(self.type_die, name, is_class)
+        is_class=self.tag == 'DW_TAG_class_type'
+        stype = StructTypeBasic(name) if typename_basic else structDIE_to_varlib(self, name, is_class)
         return stype
-    elif self.type_die.tag == 'DW_TAG_pointer_type':
-        ptype = PointerType(None, self.type_die.byte_size)
-        ptype.pointed_to = to_varlib_dtype(self.type_die, typedef_name, typename_basic)
+    elif self.tag == 'DW_TAG_pointer_type':
+        ptype = PointerType(None, self.byte_size)
+        ptype.pointed_to = die_to_dtype(self.type_die, typedef_name, typename_basic) if self.type_die is not None else BuiltinType.create_void_type()
         return ptype
-    elif self.type_die.tag == 'DW_TAG_base_type':
-        is_float, is_signed = getDwarfBaseTypeEncodingAttrs(self.type_die.encoding)
-        return BuiltinType(self.type_die.name, is_float, is_signed, self.type_die.byte_size)
-    elif self.type_die.tag == 'DW_TAG_array_type':
-        # subrange = [x for x in self.type_die.iter_children() if x.tag == 'DW_TAG_subrange_type'][0]
-        subranges = [x for x in self.type_die.iter_children() if x.tag == 'DW_TAG_subrange_type']
+    elif self.tag == 'DW_TAG_base_type':
+        is_float, is_signed = getDwarfBaseTypeEncodingAttrs(self.encoding)
+        return BuiltinType(self.name, is_float, is_signed, self.byte_size)
+    elif self.tag == 'DW_TAG_array_type':
+        # subrange = [x for x in self.iter_children() if x.tag == 'DW_TAG_subrange_type'][0]
+        subranges = [x for x in self.iter_children() if x.tag == 'DW_TAG_subrange_type']
         arrtype = ArrayType(None, num_elements=1)
 
         # for multi-dim array - array dim sizes are in L-R order
@@ -288,42 +291,42 @@ def to_varlib_dtype(self:DIE, typedef_name:str='', typename_basic:bool=False):
                 current = current.element_type      # point to next layer down
 
         # overwrite final layer with actual contained type
-        current.element_type = to_varlib_dtype(self.type_die, typedef_name, typename_basic)
+        current.element_type = die_to_dtype(self.type_die, typedef_name, typename_basic)
 
         # return top-level type
         return arrtype
-    elif self.type_die.tag == 'DW_TAG_union_type':
-        name = get_typename(self)
-        return UnionTypeBasic(self.type_die.name) if typename_basic else unionDIE_to_varlib(self.type_die, name)
-    elif self.type_die.tag == 'DW_TAG_subroutine_type':
+    elif self.tag == 'DW_TAG_union_type':
+        name = get_typename(self, typedef_name)
+        return UnionTypeBasic(self.name) if typename_basic else unionDIE_to_varlib(self, name)
+    elif self.tag == 'DW_TAG_subroutine_type':
         fproto = FunctionType(None, [], typedef_name)
         if not typename_basic:
             # only grab the signature if we're doing the full definition
-            fproto.return_dtype = to_varlib_dtype(self.type_die) if self.type_die.type_die else BuiltinType.create_void_type()
-            fproto.params = [to_varlib_dtype(p) for p in self.type_die.iter_children() if p.tag == 'DW_TAG_formal_parameter']
+            fproto.return_dtype = die_to_dtype(self.type_die) if self.type_die else BuiltinType.create_void_type()
+            fproto.params = [die_to_dtype(p.type_die) for p in self.iter_children() if p.tag == 'DW_TAG_formal_parameter']
         return fproto
-    elif self.type_die.tag == 'DW_TAG_enumeration_type':
+    elif self.tag == 'DW_TAG_enumeration_type':
         name = get_typename(self)
         return EnumType(name)
 
     # C++ workarounds...
-    if self.type_die.tag == 'DW_TAG_reference_type' or \
-       self.type_die.tag == 'DW_TAG_rvalue_reference_type':
+    if self.tag == 'DW_TAG_reference_type' or \
+       self.tag == 'DW_TAG_rvalue_reference_type':
         # HACK: treat reference types as pointers for now
-        ptype = PointerType(None, self.type_die.byte_size)
-        ptype.pointed_to = to_varlib_dtype(self.type_die, typedef_name, typename_basic)
+        ptype = PointerType(None, self.byte_size)
+        ptype.pointed_to = die_to_dtype(self.type_die, typedef_name, typename_basic) if self.type_die is not None else BuiltinType.create_void_type()
         return ptype
-    elif self.type_die.tag == 'DW_TAG_ptr_to_member_type':
+    elif self.tag == 'DW_TAG_ptr_to_member_type':
         # HACK: treat ptr_to_member (C++-ism) as void*
-        return PointerType(BuiltinType.create_void_type(), self.type_die.byte_size)
-    elif self.type_die.tag == 'DW_TAG_unspecified_type':
-        if self.type_die.name == 'decltype(nullptr)':
-            return PointerType(BuiltinType.create_void_type(), self.type_die.byte_size)
-        print(f'Returning None for DW_TAG_unspecified_type {self.type_die.name}')
+        return PointerType(BuiltinType.create_void_type(), self.byte_size)
+    elif self.tag == 'DW_TAG_unspecified_type':
+        if self.name == 'decltype(nullptr)':
+            return PointerType(BuiltinType.create_void_type(), self.byte_size)
+        print(f'Returning None for DW_TAG_unspecified_type {self.name}')
         return None
 
-    raise Exception(f'UNHANDLED type_die tag: {self.type_die.tag}')
-    # print(f'UNHANDLED type_die tag: {self.type_die.tag}')
+    raise Exception(f'UNHANDLED type_die tag: {self.tag}')
+    # print(f'UNHANDLED type_die tag: {self.tag}')
     # import IPython; IPython.embed()
 
 def to_varlib_location(self:DIE):
@@ -409,7 +412,15 @@ DIE.low_pc = die_property('DW_AT_low_pc', None)
 DIE.high_pc = die_property('DW_AT_high_pc', None)
 DIE.type_die = property(get_type_die)
 DIE.type_name = property(get_die_typename)
-DIE.dtype_varlib = property(to_varlib_dtype)
+
+# DIE.dtype_varlib = property(to_varlib_dtype)
+
+# NEW dtype_varlib needs to be:
+# typedie_dtype -> convert .type_die to DataType
+DIE.typedie_dtype = property(lambda x: die_to_dtype(x.type_die) if x.type_die else None)
+# dtype -> convert (self) to DataType
+DIE.dtype = property(die_to_dtype)
+
 DIE.byte_size = die_property('DW_AT_byte_size', None)
 DIE.encoding = die_property('DW_AT_encoding', None)
 DIE.artificial = die_property('DW_AT_artificial', None)
