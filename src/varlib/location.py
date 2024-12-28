@@ -1,13 +1,13 @@
 from typing import List
 
 class LocationType:
-    Register = 'reg'
+    Register = 'register'
     Stack = 'stack'
     Memory = 'mem'
     # these may be temporary...going to see how these correlate
     # with DWARF symbols first
-    Join = 'JOIN'
-    Unique = 'UNIQUE'
+    Join = 'join'
+    Unique = 'unique'
     # this is intended to represent a location that doesn't exist or is unspecified
     # (by DWARF usually), I'm adding it for variables that have no location.
     # Looking at a variable like this, I think it got optimized out. So the debug
