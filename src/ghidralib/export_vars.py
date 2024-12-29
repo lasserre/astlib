@@ -20,7 +20,7 @@ from .projects import *
 from .decompiler import AstDecompiler
 from astlib.find_all_references import *
 
-def export_func_vars(decompiler:AstDecompiler, func:Function, bid:int=-1) -> pd.DataFrame:
+def export_func_vars(decompiler:AstDecompiler, func:Function, bid:int=-1, skip_unique_vars:bool=False) -> pd.DataFrame:
     '''
     Exports a table describing the AST variables and their data types for the
     locals and parameters of the given function.
@@ -38,6 +38,9 @@ def export_func_vars(decompiler:AstDecompiler, func:Function, bid:int=-1) -> pd.
     fdecl = tudecl.fdecl
     func_vars = fdecl.params + fdecl.local_vars
 
+    if skip_unique_vars:
+        func_vars = remove_unique_vars(func_vars)
+
     # find all refs & compute signatures
     var_refs = [FindAllVarRefs(v.name).visit(fdecl.func_body) for v in func_vars]
     var_sigs = [compute_var_ast_signature(refs, fdecl.address) for refs in var_refs]
@@ -48,16 +51,16 @@ def export_func_vars(decompiler:AstDecompiler, func:Function, bid:int=-1) -> pd.
 
     return pd.DataFrame.from_records(rows, columns=columns)
 
-def export_vars(decompiler:AstDecompiler, func_list:List[Function], bid:int=-1) -> pd.DataFrame:
+def export_vars(decompiler:AstDecompiler, func_list:List[Function], bid:int=-1, skip_unique_vars:bool=False) -> pd.DataFrame:
     '''
     Exports a combined table for all the function vars in the
     specified function list
     '''
     return pd.concat(
-            [export_func_vars(decompiler, f, bid) for f in tqdm(func_list, desc=decompiler.program.name)]
+            [export_func_vars(decompiler, f, bid, skip_unique_vars) for f in tqdm(func_list, desc=decompiler.program.name)]
         ).reset_index(drop=True)
 
-def export_debug_vars(proj:GhidraProject, debug_files:List[DomainFile], limit_funcs:int=None) -> pd.DataFrame:
+def export_debug_vars(proj:GhidraProject, debug_files:List[DomainFile], limit_funcs:int=None, skip_unique_vars:bool=False) -> pd.DataFrame:
     '''
     Exports the debug variable types to a combined data frame for the given binaries
     '''
@@ -76,7 +79,7 @@ def export_debug_vars(proj:GhidraProject, debug_files:List[DomainFile], limit_fu
 
         with GhidraCheckoutProgram(proj, debug_file, bid=bid) as co:
             nonthunks = co.decompiler.nonthunk_functions[:limit_funcs]
-            vdf = export_vars(co.decompiler, nonthunks, bid)
+            vdf = export_vars(co.decompiler, nonthunks, bid, skip_unique_vars)
             # save mapping to original runid/bid
             vdf['Binary'] = binary_name
             vdf['OrigBinaryId'] = orig_bid

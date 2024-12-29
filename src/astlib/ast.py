@@ -676,6 +676,13 @@ class ParmVarDecl(VarDecl):
         pvdecl._children_from_dict(d, ctx)
         return pvdecl
 
+def remove_unique_vars(var_list:List[VarDecl]) -> List[VarDecl]:
+    '''
+    Remove Ghidra's UNIQUE variables from this list of VarDecl's
+    '''
+    skip_loctypes = ['unique', '']      # sometimes we get empty loc_types for unique or hash vars
+    return list(filter(lambda v: v.location.loc_type not in skip_loctypes, var_list))
+
 class FunctionDecl(ValueDecl):
     def __init__(self, id:int, name:str, address:int, is_intrinsic:bool, return_dtype:DataType, params:List[ParmVarDecl]):
         super().__init__(id)
