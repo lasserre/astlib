@@ -51,10 +51,11 @@ def get_namespace_str(self:DIE) -> str:
     return "::".join(get_namespaces(self))
 
 def get_type_die(self:DIE):
-    type_die:DIE
-    if 'DW_AT_type' not in self.attributes:
-        return None
-    return self.get_DIE_from_attribute('DW_AT_type')
+    if 'DW_AT_type' in self.attributes:
+        return self.get_DIE_from_attribute('DW_AT_type')
+    elif self.abstract_origin:
+        return get_type_die(self.abstract_origin)
+    return None
 
 def get_die_typename(self:DIE):
     type_die:DIE
@@ -400,8 +401,25 @@ def find_struct_tag(self:DIE) -> DIE:
     type_die = self.get_DIE_from_attribute('DW_AT_type')
     return find_struct_tag(type_die)
 
+def resolve_abstract_origin(self:DIE) -> DIE:
+    if 'DW_AT_abstract_origin' in self.attributes:
+        abs_orig = self.attributes['DW_AT_abstract_origin']
+        if abs_orig.form == 'DW_FORM_ref_addr':
+            return self.dwarfinfo.get_DIE_from_refaddr(abs_orig.value)
+        else:
+            # CLS: only handling DW_FORM_ref_addr so far
+            print(f"Warning: unable to resolve abstract origin of the form: {abs_orig.form}")
+    return None
+
+def get_die_name(self:DIE) -> str:
+    if 'DW_AT_name' in self.attributes:
+        return self.attributes['DW_AT_name'].value.decode()
+    elif self.abstract_origin:
+        return get_die_name(self.abstract_origin)
+    return ''
+
 # DIE.name = die_property('DW_AT_name', b'')
-DIE.name = property(lambda x: x.attributes['DW_AT_name'].value.decode() if 'DW_AT_name' in x.attributes else '')
+DIE.name = property(get_die_name)
 DIE.namebytes = die_property('DW_AT_name', b'')
 # external => visible outside its compilation unit
 DIE.external = die_property('DW_AT_external', False)
@@ -428,6 +446,7 @@ DIE.upper_bound = die_property('DW_AT_upper_bound', None)
 DIE.count = die_property('DW_AT_count', None)
 DIE.inline = die_property('DW_AT_inline', None)
 DIE.language = die_property('DW_AT_language', None)
+DIE.abstract_origin = property(resolve_abstract_origin)
 
 # CLS: taken from dwarf_lineprogram_filenames.py example in pyelftools
 def line_entry_mapping(line_program):
@@ -600,8 +619,7 @@ class DwarfDebugInfo:
         if not cu_list:
             cu_list = list(self.dwarf.iter_CUs())
 
-        # CLS: only allow C/C++ right now (this can become a parameter if needed, but
-        # I always want this for now)
+        # CLS: filter on this list to only allow C/C++
         lang_list = [
             constants.DW_LANG_C,
             constants.DW_LANG_C89,
