@@ -16,7 +16,7 @@ from ghidra.program.model.listing import FunctionManager, Function, Program
 from ghidra.program.model.data import DataTypeManager
 from ghidra.program.model.pcode import HighSymbol
 
-from astlib import TranslationUnitDecl, read_json_str, build_var_ast_signature, VarDecl
+from astlib import TranslationUnitDecl, read_json_str, build_var_ast_signature, VarDecl, JsonRecursionError
 from varlib import StructDatabase
 from .export_types import export_ghidra_types_to_sdb
 
@@ -124,7 +124,12 @@ class AstDecompiler:
         if not ast_json:
             return None     # last_error_msg should be filled out
 
-        tudecl = read_json_str(ast_json, sdb=sdb)
+        try:
+            tudecl = read_json_str(ast_json, sdb=sdb)
+        except JsonRecursionError:
+            # allow us to recover from a single function that triggers the JsonRecursionError
+            self.last_error_msg = 'JsonRecursionError in decompile_ast (read_json_str)'
+            return None
         self.last_ast_log = tudecl.logfile
         return tudecl if not self.last_ast_log else None
 
