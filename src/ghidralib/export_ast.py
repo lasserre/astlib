@@ -57,15 +57,15 @@ def decompile_all(export_folder:Path, host:str, repo:str, folder:str, binaryName
                     if max_funcs > -1 and i >= max_funcs:
                         break
 
-                    ast = decompiler.decompile_ast(func)
+                    fdecomp = decompiler.decompile(func)
 
-                    if ast is None:
+                    if fdecomp.ast is None:
                         addr_str = f'{func.entryPoint.offset:x}'
-                        if decompiler.last_error_msg:
+                        if fdecomp.error_msg:
                             failed_decompilations.append(addr_str)
                         else:
                             failed_ast_exports.append(addr_str)
-                            failed_ast_log.extend([addr_str, decompiler.last_ast_log])
+                            failed_ast_log.extend([addr_str, fdecomp.ast_log])
                         continue
 
                     # save ast to json
@@ -75,7 +75,7 @@ def decompile_all(export_folder:Path, host:str, repo:str, folder:str, binaryName
                     filename += '.json'
 
                     with open(export_folder/filename, 'w') as f:
-                        json.dump(ast.to_dict(), f)
+                        json.dump(fdecomp.ast.to_dict(), f)
 
         # log addresses of failed decompilations
         if failed_decompilations:

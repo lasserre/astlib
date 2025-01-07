@@ -29,6 +29,27 @@ def get_decompiler_interface(program:ProgramDB, options:DecompileOptions=None) -
     ifc.openProgram(program)
     return ifc
 
+class DecompiledFunction:
+    '''
+    Contains decompiled function outputs all in one place
+    for convenience
+    '''
+    def __init__(self, ast:TranslationUnitDecl, error_msg:str, results:DecompileResults):
+        self.ast = ast
+        self.error_msg = error_msg
+        self.results = results
+
+    @property
+    def ast_log(self) -> str:
+        return self.ast.logfile
+
+    @property
+    def local_sym_dict(self) -> Dict[str, HighSymbol]:
+        '''
+        Get dictionary of localSymbolMap from decompile results
+        '''
+        return dict(self.results.highFunction.localSymbolMap.nameToSymbolMap)
+
 class AstDecompiler:
     AST_DELIM = '#$#$# BEGIN AST #@#@#'
 
@@ -46,10 +67,6 @@ class AstDecompiler:
 
         self.ifc = DecompInterface()
         self.ifc.setOptions(self.options)
-
-        self.last_res:DecompileResults = None   # cache last decompile result
-        self.last_error_msg:str = ''
-        self.last_ast_log:str = ''      # filled out in case of AST errors (content in logfile)
 
     def __enter__(self) -> 'AstDecompiler':
         self.ifc.openProgram(self.program)
@@ -76,62 +93,45 @@ class AstDecompiler:
     def nonthunk_functions(self) -> List[Function]:
         return [f for f in self.func_mgr.getFunctions(True) if not f.isThunk()]
 
-    def get_local_sym_dict(self, res:DecompileResults) -> Dict[str, HighSymbol]:
-        '''
-        Get dictionary of localSymbolMap from decompile results
-        '''
-        return dict(res.highFunction.localSymbolMap.nameToSymbolMap)
-
-    @property
-    def local_sym_dict(self) -> Dict[str, HighSymbol]:
-        '''
-        Return the local symbol dictionary from the last function decompiled
-        '''
-        return self.get_local_sym_dict(self.last_res)
-
     def export_program_struct_db(self) -> StructDatabase:
         '''
         Export the structure database defining the composite types for this program
         '''
         return export_ghidra_types_to_sdb(self.datatype_mgr)
 
-    def _decompile_ast_json(self, func:Function) -> str:
+    @staticmethod
+    def extract_ast_json_from_decomp_results(res:DecompileResults) -> Tuple[str, str]:
         '''
-        Decompiles the given function AST and returns the result as a JSON string
+        Separates the error message and AST JSON from the DecompileResults and returns
+        them as a tuple: (error_msg, ast_json)
         '''
-        self.last_res = None
-        self.last_error_msg = ''
-        self.last_ast_log = ''
-
-        res = self.ifc.decompileFunction(func, self.timeout_sec, None)
-
         if AstDecompiler.AST_DELIM in res.errorMessage:
             error_msg, ast_json = res.errorMessage.split(AstDecompiler.AST_DELIM)
         else:
             error_msg = res.errorMessage
             ast_json = ''
+        return (error_msg, ast_json)
 
-        self.last_res = res
-        self.last_error_msg = error_msg
-
-        return '' if not res.decompileCompleted() else ast_json
-
-    def decompile_ast(self, func:Function, sdb:StructDatabase=None) -> TranslationUnitDecl:
+    def decompile(self, func:Function, sdb:StructDatabase=None) -> DecompiledFunction:
         '''
-        Decompiles the given function AST
+        Decompiles the given function
         '''
-        ast_json = self._decompile_ast_json(func)
+        res = self.ifc.decompileFunction(func, self.timeout_sec, None)
+        error_msg, ast_json = AstDecompiler.extract_ast_json_from_decomp_results(res)
+
+        if not res.decompileCompleted():
+            ast_json = ''   # don't return something if the decompiler didn't properly complete
+
         if not ast_json:
-            return None     # last_error_msg should be filled out
+            return DecompiledFunction(ast=None, error_msg, res)
 
         try:
             tudecl = read_json_str(ast_json, sdb=sdb)
+            ast = None if tudecl.logfile else tudecl    # if we had AST errors (logfile present in JSON) return None to indicate failure
+            return DecompiledFunction(ast, error_msg, res)
         except JsonRecursionError:
-            # allow us to recover from a single function that triggers the JsonRecursionError
-            self.last_error_msg = 'JsonRecursionError in decompile_ast (read_json_str)'
-            return None
-        self.last_ast_log = tudecl.logfile
-        return tudecl if not self.last_ast_log else None
+            # allow us to recover from a massive function that triggers the JsonRecursionError
+            return DecompiledFunction(ast=None, error_msg='JsonRecursionError in AstDecompiler (read_json_str)', results=res)
 
     def decompile_and_extract_signatures(self, func:Function, sdb:StructDatabase=None) -> Tuple[TranslationUnitDecl, Dict[str, VarDecl]]:
         '''
@@ -140,7 +140,7 @@ class AstDecompiler:
         Returns a tuple of (decompiled AST, var_signatures) where var_signatures is a dictionary mapping
         variable signature to the corresponding VarDecl
         '''
-        ast = self.decompile_ast(func, sdb)
+        ast = self.decompile(func, sdb).ast
         func_vars = ast.fdecl.params + ast.fdecl.local_vars
         vars_by_sig = {build_var_ast_signature(ast.fdecl, v.name): v for v in func_vars}
         return (ast, vars_by_sig)

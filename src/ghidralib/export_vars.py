@@ -29,7 +29,8 @@ def export_func_vars(decompiler:AstDecompiler, func:Function, bid:int=-1, skip_u
         'BinaryId','FunctionStart','Signature','Vartype','Name','Location','Type','TypeJson',
     ]
 
-    tudecl = decompiler.decompile_ast(func)
+    fdecomp = decompiler.decompile(func)
+    tudecl = fdecomp.ast
 
     if not tudecl:
         # failed to decompile - return empty dataframe
