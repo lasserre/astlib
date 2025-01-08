@@ -123,7 +123,7 @@ class AstDecompiler:
             ast_json = ''   # don't return something if the decompiler didn't properly complete
 
         if not ast_json:
-            return DecompiledFunction(ast=None, error_msg, res)
+            return DecompiledFunction(ast=None, error_msg=error_msg, results=res)
 
         try:
             tudecl = read_json_str(ast_json, sdb=sdb)

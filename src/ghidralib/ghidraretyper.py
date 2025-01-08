@@ -58,10 +58,10 @@ ghidra_data_type_by_caleb_data_type = {
 }
 
 class GhidraRetyper:
-    def __init__(self, program:Program, sdb:StructDatabase) -> None:
+    def __init__(self, program:Program, sdb:StructDatabase=None) -> None:
 
         self.program = program
-        self.sdb = sdb
+        self.sdb = sdb if sdb else StructDatabase()
 
         # Define data type Category Paths
         self.struct_category_path = CategoryPath('/GhidraRetyper/Structs')
