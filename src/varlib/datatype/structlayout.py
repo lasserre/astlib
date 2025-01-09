@@ -1,4 +1,4 @@
-from typing import Dict, List, Set
+from typing import Dict, List, Set, Union
 
 from .datatypes import DataType
 
@@ -175,9 +175,9 @@ class StructDefinition:
     declared types (that are empty until we know the definition later), recursively defined types
     (e.g. struct with a pointer to itself), etc.
     '''
-    def __init__(self, name:str, layout:StructLayout, is_class:bool=False, ghidra_uid:int=-1) -> None:
+    def __init__(self, name:str, layout:Union[StructLayout, Dict[int,StructField]], is_class:bool=False, ghidra_uid:int=-1) -> None:
         self.name = name
-        self.layout = layout
+        self.layout = StructLayout(layout)
         self.is_class = is_class
         self.ghidra_uid = ghidra_uid
 
