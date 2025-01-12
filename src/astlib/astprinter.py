@@ -478,7 +478,10 @@ class PrintASTVisitor(ASTVisitor):
             code += self._start_line()
 
         if isinstance(vdecl.dtype, PointerType) and isinstance(vdecl.dtype.pointed_to, FunctionType):
-            code += f'{vdecl.dtype.pointed_to.str_with_varname(vdecl.name)}{line_end}'
+            #code += f'{vdecl.dtype.pointed_to.str_with_varname(vdecl.name)}{line_end}'
+            # CLS: not sure this is right, just removing code that called old
+            # str_with_varname (above)
+            code += f'{vdecl}{line_end}'
         else:
             nelem = self._num_vdecl_arr_elements
             arr_size = f'[{nelem}]' if nelem is not None else ''
