@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Callable, Any, List, Dict, Tuple
 
 from varlib import StructDatabase
-from varlib.datatype import DataType, EnumType, UnionDefinition, StructDefinition
+from varlib.datatype import DataType, EnumType, UnionDefinition, StructDefinition, StructType, UnionType
 from varlib.location import Location, LocationType
 
 from .astvisitor import DatatypePrinter, HasNodeTypesVisitor, GetNodesAtAddr
@@ -526,26 +526,20 @@ class MemberExpr(ASTNode):
         pass
 
     @property
-    def parent_struct(self) -> StructDefinition:
+    def parent_struct(self) -> StructType:
         '''
         Structure that this member is defined within, if it is a structure.
         Returns None if the containing type is a union
         '''
-        if self.sdb:
-            if self.sid in self.sdb.structs_by_id:
-                return self.sdb.structs_by_id[self.sid]
-        return None
+        return StructType(self.sdb, self.sid) if (self.sdb and self.sid in self.sdb.structs_by_id) else None
 
     @property
-    def parent_union(self) -> UnionDefinition:
+    def parent_union(self) -> UnionType:
         '''
         Union that this member is defined within, if it is a union.
         Returns None if the containing type is a structure
         '''
-        if self.sdb:
-            if self.sid in self.sdb.unions_by_id:
-                return self.sdb.unions_by_id[self.sid]
-        return None
+        return UnionType(self.sdb, self.sid) if (self.sdb and self.sid in self.sdb.unions_by_id) else None
 
     def to_dict(self) -> dict:
         return {
