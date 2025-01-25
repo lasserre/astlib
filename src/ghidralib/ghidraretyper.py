@@ -58,10 +58,10 @@ ghidra_data_type_by_caleb_data_type = {
 }
 
 class GhidraRetyper:
-    def __init__(self, program:Program, sdb:StructDatabase=None) -> None:
+    def __init__(self, program:Program) -> None:
 
         self.program = program
-        self.sdb = sdb if sdb else StructDatabase()
+        # self.sdb = sdb if sdb else StructDatabase()
 
         # Define data type Category Paths
         self.struct_category_path = CategoryPath('/GhidraRetyper/Structs')
@@ -92,13 +92,13 @@ class GhidraRetyper:
         return (len(struct_conflicts) +  len(union_conflicts)) > 0
 
     # TODO: this is a long function, need to break it up
-    def define_all_reference_types(self, overwrite_existing:bool=False):
+    def define_all_reference_types(self, sdb:StructDatabase, overwrite_existing:bool=False):
         '''
         Define all of the structure and union types in the reference StructDatabase
         (prior to retyping any variables)
         '''
-        structs = self.sdb.structs_by_id
-        unions = self.sdb.unions_by_id
+        structs = sdb.structs_by_id
+        unions = sdb.unions_by_id
 
         if self.check_conflicts(structs, unions) == True:
             raise Exception('ERROR: multiple definitions for the same composite')
