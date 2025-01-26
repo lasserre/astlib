@@ -168,9 +168,9 @@ class GhidraRetyper:
             # Length zero means field length determined from data type size
             new_union.add(dtype, 0, field.name, None)
 
-    def set_funcvar_type(self, symbol:HighSymbol, dtype:datatype.DataType, name:str=None):
+    def update_function_variable(self, symbol:HighSymbol, dtype:datatype.DataType=None, name:str=None):
         '''
-        Set local or param variable type
+        Update the data type and/or name of this symbol (local or parameter)
         '''
         # Update data type
         ghidra_dtype = self.convert_dtype(dtype)
