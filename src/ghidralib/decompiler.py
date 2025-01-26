@@ -15,6 +15,7 @@ from ghidra.program.database import ProgramDB
 from ghidra.program.model.listing import FunctionManager, Function, Program
 from ghidra.program.model.data import DataTypeManager
 from ghidra.program.model.pcode import HighSymbol
+from ghidra.program.model.address import Address
 
 from astlib import TranslationUnitDecl, read_json_str, build_var_ast_signature, VarDecl, JsonRecursionError
 from varlib import StructDatabase
@@ -88,6 +89,12 @@ class AstDecompiler:
     @property
     def functions(self) -> List[Function]:
         return list(self.func_mgr.getFunctions(True))
+
+    def get_address_from_offset(self, offset:int) -> Address:
+        return self.program.addressFactory.getAddress(f'0x{offset:x}')
+
+    def get_function(self, offset:int) -> Function:
+        return self.func_mgr.getFunctionAt(self.get_address_from_offset(offset))
 
     @property
     def nonthunk_functions(self) -> List[Function]:
