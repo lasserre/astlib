@@ -279,7 +279,7 @@ class DeclRefExpr(ASTNode):
         self._tudecl = tudecl
 
     def __repr__(self):
-        return f'<DeclRef: {self.referencedDecl.name}>'
+        return f'<DeclRef: {self.name}>'
 
     @property
     def decl_type_str(self) -> str:
@@ -297,6 +297,20 @@ class DeclRefExpr(ASTNode):
         if self.decl_type == 3:
             return EnumConstantDecl(self.enum_name, self.enum_val)
         return self.tudecl._decls_by_id[self.referenced_id]
+
+    @property
+    def name(self) -> str:
+        return self.referencedDecl.name
+
+    @property
+    def dtype(self) -> DataType:
+        return self.referencedDecl.dtype
+
+    @dtype.setter
+    def dtype(self, value):
+        # do nothing - just define this so the base class initializing a value
+        # doesn't break the use of our dtype property
+        pass
 
     def to_dict(self) -> dict:
         d = {

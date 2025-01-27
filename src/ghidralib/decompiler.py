@@ -14,8 +14,9 @@ from ghidra.app.decompiler import DecompInterface, DecompileOptions, DecompileRe
 from ghidra.program.database import ProgramDB
 from ghidra.program.model.listing import FunctionManager, Function, Program
 from ghidra.program.model.data import DataTypeManager
-from ghidra.program.model.pcode import HighSymbol
+from ghidra.program.model.pcode import HighSymbol, HighFunctionDBUtil
 from ghidra.program.model.address import Address
+from ghidra.program.model.symbol import SourceType
 
 from astlib import TranslationUnitDecl, read_json_str, build_var_ast_signature, VarDecl, JsonRecursionError
 from varlib import StructDatabase
@@ -151,3 +152,16 @@ class AstDecompiler:
         func_vars = ast.fdecl.params + ast.fdecl.local_vars
         vars_by_sig = {build_var_ast_signature(ast.fdecl, v.name): v for v in func_vars}
         return (ast, vars_by_sig)
+
+    def commit_function_prototype(self, fdecomp:DecompiledFunction, use_data_types:bool=True, return_commit:bool=True):
+        '''
+        Commits the function prototype to the database
+        '''
+        hf = fdecomp.results.highFunction
+        HighFunctionDBUtil.commitParamsToDatabase(hf, use_data_types, SourceType.USER_DEFINED)
+        if return_commit:
+            HighFunctionDBUtil.commitReturnToDatabase(hf, SourceType.USER_DEFINED)
+
+        # CLS: we don't want to commit local names - we will individually rename the variables
+        # we retype, and Ghidra can recover variables differently if appropriate
+        # HighFunctionDBUtil.commitLocalNamesToDatabase
