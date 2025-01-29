@@ -352,6 +352,18 @@ class CallExpr(ASTNode):
             for a in args:
                 self.add_child(a)
 
+    @property
+    def dtype(self) -> DataType:
+        # typically DeclRefExpr.dtype (which is return_type for FunctionDecl)
+        # but would handle other AST node types
+        return self.inner[0].dtype
+
+    @dtype.setter
+    def dtype(self, value):
+        # do nothing - just define this so the base class initializing a value
+        # doesn't break the use of our dtype property
+        pass
+
     @staticmethod
     def from_dict(d:dict, ctx:FromDictContext) -> 'CallExpr':
         cexpr = CallExpr()
