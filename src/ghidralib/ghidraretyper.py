@@ -32,9 +32,10 @@ from ghidra.program.model.symbol import SourceType
 
 # Caleb's stuff (astlib)
 from varlib import datatype, StructDatabase
+from varlib.datatype import StructDefinition
 
 # Normal python stuff
-from typing import Dict
+from typing import Dict, List
 
 # Dictionary to map Caleb's (common) builtin data type strings to Ghidra data type paths
 ghidra_data_type_by_caleb_data_type = {
@@ -91,34 +92,48 @@ class GhidraRetyper:
         # Return true if any conflicts exist
         return (len(struct_conflicts) +  len(union_conflicts)) > 0
 
-    # TODO: this is a long function, need to break it up
-    def define_all_reference_types(self, sdb:StructDatabase, overwrite_existing:bool=False):
+    def get_retyped_structure_id(self, struct_name:str) -> int:
+        matching_structs = [s for s in self.dtype_mgr.allStructures if s.pathName == f'{self.struct_category_path}/{struct_name}']
+        if not matching_structs:
+            return -1
+        # CLS: return None if multiple matches to catch any issues here - we expect unique retyped names
+        return matching_structs[0].key if len(matching_structs) == 1 else None
+
+    def define_all_reference_types(self, sdb:StructDatabase, overwrite_existing:bool=False, subset_names:List[str]=None):
         '''
         Define all of the structure and union types in the reference StructDatabase
         (prior to retyping any variables)
+
+        subset_names: A subset of structure names which exist in sdb that should be defined (skipping the rest)
         '''
+        # NOTE - don't simply call define_new_structure() iteratively here so we can
+        # support definining "complete" data types in an sdb (that may reference other
+        # types defined here!)
         structs = sdb.structs_by_id
         unions = sdb.unions_by_id
 
         if self.check_conflicts(structs, unions) == True:
             raise Exception('ERROR: multiple definitions for the same composite')
 
+        struct_items = [x for x in structs.items() if x[1].name in subset_names] if subset_names else structs.items()
+        union_items = [x for x in unions.items() if x[1].name in subset_names] if subset_names else unions.items()
+
         # Iterate through all composites and create empty structs/unions
-        for sid, sdef in structs.items():
+        for sid, sdef in struct_items:
             # Define empty struct
             new_struct = StructureDataType(self.struct_category_path, sdef.name, 0)
             # CLS NOTE: Dylan had "None" as the 2nd argument instead of "overwrite_existing"
             self.add_to_data_type_manager(new_struct, overwrite_existing)
-        for uid, udef in unions.items():
+        for uid, udef in union_items:
             # Define empty union
             new_union = UnionDataType(self.union_category_path, udef.name)
             self.add_to_data_type_manager(new_union, overwrite_existing)
 
         # Iterate through composites again and add definitions
-        for sid, sdef in structs.items():
+        for sid, sdef in struct_items:
             # Define internal struct members
             self.define_struct_type(sdef, overwrite_existing)
-        for uid, udef in unions.items():
+        for uid, udef in union_items:
             # Define internal union members
             self.define_union_type(udef, overwrite_existing)
 

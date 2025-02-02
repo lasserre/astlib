@@ -124,6 +124,8 @@ class StructType(DataType):
         # database (flattened_structs) to maintain a 1-1 mapping from any
         # sid to its flat version
 
+        # this can go away, except to support older versions of StructDatabases
+        # which did not have flattened_structs defined
         if not hasattr(db, 'flattened_structs'):
             db.flattened_structs = {}   # maps original (non-flat) sid: flattened sid
 

@@ -5,6 +5,8 @@ if typing.TYPE_CHECKING:
 import ghidra
 from ghidra.program.model.data import DataTypeManager
 
+from tqdm import tqdm
+
 from varlib import StructDatabase
 from varlib.datatype import StructType, UnionType, StructDefinition, UnionDefinition, StructLayout, UnionLayout, StructField
 from wildebeest.utils import show_progress
@@ -27,11 +29,15 @@ def get_union_definition(utype:ghidra.program.model.data.Union) -> UnionDefiniti
     ghidra_uid = utype.universalID.value    # save this since sids are DIFFERENT
     return UnionDefinition(utype.name, get_union_layout(utype), ghidra_uid=ghidra_uid)
 
-def export_ghidra_types_to_sdb(dtmgr:DataTypeManager) -> StructDatabase:
+def export_ghidra_types_to_sdb(dtmgr:DataTypeManager, progress_bar:bool=True) -> StructDatabase:
     # Ghidra already has unique ids - just construct structs/unions_by_id manually
     sdb = StructDatabase()
 
-    for ghidra_type in show_progress(dtmgr.getAllComposites(), total=len(list(dtmgr.getAllComposites()))):
+    all_composites = list(dtmgr.getAllComposites())
+    if progress_bar:
+        all_composites = tqdm(all_composites, desc='Exporting structs/unions')
+
+    for ghidra_type in all_composites:
         dtype = to_varlib_dtype(ghidra_type, ghidra_type.getLength())
         if isinstance(dtype, StructType):
             sdb.structs_by_id[dtype.sid] = get_struct_definition(ghidra_type)
@@ -44,8 +50,10 @@ def export_ghidra_types_to_sdb(dtmgr:DataTypeManager) -> StructDatabase:
     # lookups by Typedef ID will find the canonical type (we don't wrap it
     # with typedef name right now - just return canonical type)
     typedef_types = [x for x in dtmgr.getAllDataTypes() if isinstance(x, ghidra.program.model.data.TypeDef)]
+    if progress_bar:
+        typedef_types = tqdm(typedef_types, desc='Exporting typdefs')
 
-    for td in show_progress(typedef_types, total=len(typedef_types)):
+    for td in typedef_types:
         canonical_type = td.getBaseDataType()
         if isinstance(canonical_type, ghidra.program.model.data.Structure):
             if canonical_type.key not in sdb.structs_by_id:
@@ -55,5 +63,7 @@ def export_ghidra_types_to_sdb(dtmgr:DataTypeManager) -> StructDatabase:
             if canonical_type.key not in sdb.unions_by_id:
                 raise Exception(f'No mapping for union {canonical_type} (sid={canonical_type.key})')
             sdb.unions_by_id[td.key] = sdb.unions_by_id[canonical_type.key]
+
+    sdb.build_sids_by_name()
 
     return sdb

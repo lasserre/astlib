@@ -101,11 +101,11 @@ class AstDecompiler:
     def nonthunk_functions(self) -> List[Function]:
         return [f for f in self.func_mgr.getFunctions(True) if not f.isThunk()]
 
-    def export_program_struct_db(self) -> StructDatabase:
+    def export_program_struct_db(self, progress_bar:bool=False) -> StructDatabase:
         '''
         Export the structure database defining the composite types for this program
         '''
-        return export_ghidra_types_to_sdb(self.datatype_mgr)
+        return export_ghidra_types_to_sdb(self.datatype_mgr, progress_bar)
 
     @staticmethod
     def extract_ast_json_from_decomp_results(res:DecompileResults) -> Tuple[str, str]:

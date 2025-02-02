@@ -36,6 +36,9 @@ class StructDatabase:
         # (only because gdb proved you can have name collisions within a translation unit)
         self._next_sid = 0
 
+        # this is generated on-the-fly for individual structs (see StructType.flatten())
+        self.flattened_structs:Dict[int, StructDefinition] = {}    # mirror of structs_by_id - maps SAME sids to their flattened defs
+
     @property
     def struct_types(self) -> Dict[int, StructType]:
         '''Dictionary mapping sid to StructType for each struct in the database'''
@@ -60,6 +63,7 @@ class StructDatabase:
             'sids_by_name': self.sids_by_name,
             'sid_by_tu_and_name': self.sid_by_tu_and_name,
             'uid_by_tu_and_name': self.uid_by_tu_and_name,
+            # do NOT include flattened_structs - we generate this dynamically from structs_by_id
         }
 
     @staticmethod
@@ -174,6 +178,26 @@ class StructDatabase:
             self.sids_by_name[sdef.name].append(new_sid)
 
         return new_sid
+
+    def update_struct_definition(self, sid:int, sdef:StructDefinition):
+        '''
+        Updates the structure definition in the database, invalidating any stale state
+        such as the flattened version of the structure
+        '''
+        self.structs_by_id[sid] = sdef
+        if sid in self.flattened_structs:
+            del self.flattened_structs[sid]
+
+    def build_sids_by_name(self):
+        self.sids_by_name = {}
+
+        struct_name_id_pairs = [(sdef.name, sid) for sid, sdef in self.structs_by_id.items()]
+        union_name_id_pairs = [(udef.name, sid) for sid, udef in self.unions_by_id.items()]
+
+        for name, sid in chain(struct_name_id_pairs, union_name_id_pairs):
+            if name not in self.sids_by_name:
+                self.sids_by_name[name] = []
+            self.sids_by_name[name].append(sid)
 
     def find_nested_structures(self) -> List[StructType]:
         '''
