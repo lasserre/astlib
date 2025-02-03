@@ -9,6 +9,7 @@ from ghidra.framework.model import ProjectLocator, DomainFile
 from ghidra.framework.data import DefaultCheckinHandler
 from ghidra.program.model.listing import Program
 from ghidra.app.decompiler import DecompileOptions
+from ghidra.util.exception import FileInUseException
 
 from pathlib import Path
 import uuid
@@ -123,7 +124,11 @@ def get_debug_binary(strip_binary:DomainFile):
         raise Exception(f'Multiple possible debug file matches found for {strip_binary.name}')
     return matches[0] if matches else None
 
-def verify_ghidra_revision(domain_file:DomainFile, expected_revision:int, rollback_delete:bool):
+def terminate_all_checkouts(domain_file:DomainFile):
+    for co in domain_file.checkouts:
+        domain_file.terminateCheckout(co.checkoutId)
+
+def verify_ghidra_revision(domain_file:DomainFile, expected_revision:int, rollback_delete:bool, terminate_checkouts:bool=False):
     '''
     Verifies this Ghidra file is at the expected revision.
 
@@ -139,7 +144,18 @@ def verify_ghidra_revision(domain_file:DomainFile, expected_revision:int, rollba
             print(msg)
             print(f'Rolling back {domain_file.name} from version {domain_file.version} to version {expected_revision}...')
             for v in range(domain_file.version, expected_revision, -1):
-                domain_file.delete(v)
+                try:
+                    domain_file.delete(v)
+                except FileInUseException:
+                    # this is happening all the time for me when I have to kill the process
+                    # during testing and leave a dangling checkout. I added terminate_checkouts for
+                    # convenience so this automatically kills any leftover checkouts...in case anyone is
+                    # wondering why such a thing exists later :)
+                    if terminate_checkouts:
+                        terminate_all_checkouts(domain_file)
+                        domain_file.delete(v)   # try again now that we killed checkouts
+                    else:
+                        raise
         else:
             # version < expected_revision or rollback_delete is false
             raise Exception(msg)

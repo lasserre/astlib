@@ -137,6 +137,18 @@ class GhidraRetyper:
             # Define internal union members
             self.define_union_type(udef, overwrite_existing)
 
+    def replace_structure_type(self, orig_sid:int, new_sid:int, update_category_path:bool=False) -> DataType:
+        '''
+        Replaces occurrences of orig_sid structure type with new_sid structure type (both types
+        must already be known to Ghidra) and returns the replacement (Ghidra) DataType.
+
+        NOTE: this should work for other types as well, I'm just using it for structures
+        and want to simplify the interface for the common case
+        '''
+        orig_gdt = self.dtype_mgr.getDataType(orig_sid)
+        new_gdt = self.dtype_mgr.getDataType(new_sid)
+        return self.dtype_mgr.replaceDataType(orig_gdt, new_gdt, update_category_path)
+
     def add_to_data_type_manager(self, dtype:DataType, overwrite_existing:bool=False):
         # Determine conflict resolution policy
         if overwrite_existing:
