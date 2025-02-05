@@ -30,6 +30,8 @@ from ghidra.program.model.pcode import HighSymbol
 
 from ghidra.program.model.symbol import SourceType
 
+from ghidra.util.task import ConsoleTaskMonitor
+
 # Caleb's stuff (astlib)
 from varlib import datatype, StructDatabase
 from varlib.datatype import StructDefinition
@@ -112,28 +114,33 @@ class GhidraRetyper:
         structs = sdb.structs_by_id
         unions = sdb.unions_by_id
 
-        if self.check_conflicts(structs, unions) == True:
+        struct_subset = {k: v for k, v in structs.items() if v.name in subset_names} if subset_names else structs
+        union_subset = {k: v for k, v in unions.items() if v.name in subset_names} if subset_names else unions
+
+        # only check conflicts for types we wish to define
+        # NOTE: when we export Ghidra typdefs by resolving to canonical type we will end up with
+        #       duplicate names (since tdef -> canonical type whose name is same as canonical type's own entry)
+        #       checking conflicts only for struct_items allows us to not worry about this case and simply
+        #       handle types we added/updated
+        if self.check_conflicts(struct_subset, union_subset):
             raise Exception('ERROR: multiple definitions for the same composite')
 
-        struct_items = [x for x in structs.items() if x[1].name in subset_names] if subset_names else structs.items()
-        union_items = [x for x in unions.items() if x[1].name in subset_names] if subset_names else unions.items()
-
         # Iterate through all composites and create empty structs/unions
-        for sid, sdef in struct_items:
+        for sid, sdef in struct_subset.items():
             # Define empty struct
             new_struct = StructureDataType(self.struct_category_path, sdef.name, 0)
             # CLS NOTE: Dylan had "None" as the 2nd argument instead of "overwrite_existing"
             self.add_to_data_type_manager(new_struct, overwrite_existing)
-        for uid, udef in union_items:
+        for uid, udef in union_subset.items():
             # Define empty union
             new_union = UnionDataType(self.union_category_path, udef.name)
             self.add_to_data_type_manager(new_union, overwrite_existing)
 
         # Iterate through composites again and add definitions
-        for sid, sdef in struct_items:
+        for sid, sdef in struct_subset.items():
             # Define internal struct members
             self.define_struct_type(sdef, overwrite_existing)
-        for uid, udef in union_items:
+        for uid, udef in union_subset.items():
             # Define internal union members
             self.define_union_type(udef, overwrite_existing)
 
