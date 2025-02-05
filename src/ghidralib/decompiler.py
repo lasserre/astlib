@@ -36,10 +36,11 @@ class DecompiledFunction:
     Contains decompiled function outputs all in one place
     for convenience
     '''
-    def __init__(self, ast:TranslationUnitDecl, error_msg:str, results:DecompileResults):
+    def __init__(self, ast:TranslationUnitDecl, error_msg:str, results:DecompileResults, ast_json:str=''):
         self.ast = ast
         self.error_msg = error_msg
         self.results = results
+        self.ast_json = ast_json
 
     @property
     def ast_log(self) -> str:
@@ -51,6 +52,15 @@ class DecompiledFunction:
         Get dictionary of localSymbolMap from decompile results
         '''
         return dict(self.results.highFunction.localSymbolMap.nameToSymbolMap)
+
+class ProgramDecompilation:
+    '''
+    Container for a set of decompiled functions and the corresponding
+    StructureDatabase from a program
+    '''
+    def __init__(self, decompiled_funcs:List[DecompiledFunction], sdb:StructDatabase):
+        self.decompiled_functions = decompiled_funcs
+        self.sdb = sdb
 
 class AstDecompiler:
     AST_DELIM = '#$#$# BEGIN AST #@#@#'
@@ -107,6 +117,16 @@ class AstDecompiler:
         '''
         return export_ghidra_types_to_sdb(self.datatype_mgr, progress_bar)
 
+    def export_program_decompilation(self, status_msg:str, funclist:List[Function]=None) -> ProgramDecompilation:
+        '''
+        Export all non-thunk functions in the program (or the functions from funclist if specified)
+        as well as the StructureDatabase for the program, and return the result as a
+        ProgramDecompilation
+        '''
+        funclist = funclist if funclist else self.nonthunk_functions
+        sdb = self.export_program_struct_db()
+        return ProgramDecompilation([self.decompile(f, sdb) for f in tqdm(funclist, desc=status_msg)], sdb)
+
     @staticmethod
     def extract_ast_json_from_decomp_results(res:DecompileResults) -> Tuple[str, str]:
         '''
@@ -136,10 +156,10 @@ class AstDecompiler:
         try:
             tudecl = read_json_str(ast_json, sdb=sdb)
             ast = None if tudecl.logfile else tudecl    # if we had AST errors (logfile present in JSON) return None to indicate failure
-            return DecompiledFunction(ast, error_msg, res)
+            return DecompiledFunction(ast, error_msg, res, ast_json)
         except JsonRecursionError:
             # allow us to recover from a massive function that triggers the JsonRecursionError
-            return DecompiledFunction(ast=None, error_msg='JsonRecursionError in AstDecompiler (read_json_str)', results=res)
+            return DecompiledFunction(ast=None, error_msg='JsonRecursionError in AstDecompiler (read_json_str)', results=res, ast_json=ast_json)
 
     def decompile_and_extract_signatures(self, func:Function, sdb:StructDatabase=None) -> Tuple[TranslationUnitDecl, Dict[str, VarDecl]]:
         '''
