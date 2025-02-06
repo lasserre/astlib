@@ -182,7 +182,7 @@ class GhidraRetyper:
                 raise Exception(f'ERROR: structure {field.dtype} contains void field')
             # Insert field at byte offset defined in layout
             # Length zero means field length determined from data type size
-            new_struct.insertAtOffset(offset, dtype, 0, field.name, None)
+            new_struct.insertAtOffset(offset, dtype, 0, field.name, field.comment)
 
     def define_union_type(self, udef:datatype.UnionDefinition, overwrite_existing:bool=False):
         # Get empty union from data type manager

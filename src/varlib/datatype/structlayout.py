@@ -6,9 +6,10 @@ class StructField:
     '''
     Do we want to call these fields or members? would be good to be consistent...
     '''
-    def __init__(self, dtype:'DataType', name:str='') -> None:
+    def __init__(self, dtype:'DataType', name:str='', comment:str=None) -> None:
         self.dtype = dtype
         self.name = name
+        self.comment = comment
 
     @property
     def size(self):
@@ -27,7 +28,8 @@ class StructField:
         return hash((self.dtype,))
 
     def __str__(self):
-        return f'{self.dtype} {self.name}'
+        comment_str = f'   // {self.comment}' if self.comment else ''
+        return f'{self.dtype} {self.name}{comment_str}'
 
     def __repr__(self) -> str:
         return str(self)
