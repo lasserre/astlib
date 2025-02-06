@@ -64,7 +64,8 @@ class StructType(DataType):
 
     @property
     def size(self):
-        return sum(f.size for f in self.layout.values())
+        last_member_off = max(self.layout.keys())
+        return last_member_off + self.layout[last_member_off].size
 
     @property
     def type_sequence_str(self) -> str:
@@ -151,18 +152,22 @@ class StructType(DataType):
 
     @property
     def nested_structs(self) -> List['StructType']:
-        nested_structs = []
-        if self.layout:
-            for field in self.layout.values():
-                field:StructField
-                if isinstance(field.dtype, StructType):
-                    nested_structs.append(StructType(self._db, field.dtype.sid))
-        return nested_structs
+        '''
+        Returns a list of leaf StructType instances for each field
+        which has a leaf type of STRUCT (without any pointer indirection)
+        '''
+        return [f.dtype.leaf_type for f in self.nested_struct_fields]
 
-# NOTE: I think unions should be treated as their own type...
-# since we care so much about offsets in structure recovery,
-# unions are handled quite differently since everything is at
-# offset = 0.
+    @property
+    def nested_struct_fields(self) -> List[StructField]:
+        '''
+        Returns a list of fields which have a STRUCT or STRUCT[] data type.
+
+        Pointers or arrays of pointers to structs are not considered nested fields.
+        In particular, pointers have a fixed size while STRUCT[] or STRUCT members will
+        change the layout of the parent structure based on their definition/size.
+        '''
+        return [f for f in self.layout.values() if f.dtype and isinstance(f.dtype.leaf_type, StructType) and 'PTR' not in f.dtype.type_sequence_str]
 
 class UnionTypeBasic(DataType):
     '''
