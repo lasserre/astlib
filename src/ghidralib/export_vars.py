@@ -52,39 +52,56 @@ def export_func_vars(decompiler:AstDecompiler, func:Function, bid:int=-1, skip_u
 
     return pd.DataFrame.from_records(rows, columns=columns)
 
-def export_vars(decompiler:AstDecompiler, func_list:List[Function], bid:int=-1, skip_unique_vars:bool=False) -> pd.DataFrame:
+def export_vars(decompiler:AstDecompiler, func_list:List[Function], bid:int=-1, skip_unique_vars:bool=False,
+                status_msg:str='') -> pd.DataFrame:
     '''
     Exports a combined table for all the function vars in the
     specified function list
     '''
     return pd.concat(
-            [export_func_vars(decompiler, f, bid, skip_unique_vars) for f in tqdm(func_list, desc=decompiler.program.name)]
+            [export_func_vars(decompiler, f, bid, skip_unique_vars) for f in tqdm(func_list, desc=status_msg if status_msg else decompiler.program.name)]
         ).reset_index(drop=True)
 
-def export_debug_vars(proj:GhidraProject, debug_files:List[DomainFile], limit_funcs:int=None, skip_unique_vars:bool=False) -> pd.DataFrame:
+class ProgramExport:
+    def __init__(self, vars_df:pd.DataFrame, sdb:StructDatabase):
+        self.vars_df = vars_df
+        self.sdb = sdb
+
+def export_program(proj:GhidraProject, bin_file:DomainFile, limit_funcs:int=None,
+                        skip_unique_vars:bool=False) -> ProgramExport:
+    # force-fitting this in here a little bit for now, but I don't want to go change the existing
+    # dragon-oriented api of export_program_vars at the moment
+    sdbs, vars_df = export_program_vars(proj, [bin_file], limit_funcs, skip_unique_vars, return_sdbs=True)
+    return ProgramExport(vars_df, sdbs[0])
+
+def export_program_vars(proj:GhidraProject, bin_files:List[DomainFile], limit_funcs:int=None,
+                        skip_unique_vars:bool=False, return_sdbs:bool=False) -> pd.DataFrame:
     '''
     Exports the debug variable types to a combined data frame for the given binaries
     '''
     # the reason to make this debug-specific is because we only care about
     # the data types - we don't need to export the ASTs themselves
     bin_vdfs = []
+    sdbs = []
 
     # remap BinaryId to ensure uniqueness across runs (OrigBinaryId/RunId maps new id to original)
     base_gid = 1000
 
-    for i, debug_file in enumerate(debug_files):
-        binary_name = original_binary_name(debug_file.parent.name)
-        orig_bid = binary_id(debug_file.name)
-        rid = run_id(debug_file.parent.name)
+    for i, bin_file in enumerate(bin_files):
+        binary_name = original_binary_name(bin_file.parent.name)
+        orig_bid = binary_id(bin_file.name)
+        rid = run_id(bin_file.parent.name)
         bid = base_gid + i      # unique id
 
-        with GhidraCheckoutProgram(proj, debug_file, bid=bid) as co:
+        with GhidraCheckoutProgram(proj, bin_file, bid=bid) as co:
             nonthunks = co.decompiler.nonthunk_functions[:limit_funcs]
             vdf = export_vars(co.decompiler, nonthunks, bid, skip_unique_vars)
+            sdbs.append(co.decompiler.export_program_struct_db())
             # save mapping to original runid/bid
             vdf['Binary'] = binary_name
             vdf['OrigBinaryId'] = orig_bid
             vdf['RunId'] = rid
             bin_vdfs.append(vdf)
 
-    return pd.concat(bin_vdfs).reset_index(drop=True)
+    var_df = pd.concat(bin_vdfs).reset_index(drop=True)
+    return (sdbs, var_df) if return_sdbs else var_df

@@ -37,7 +37,7 @@ class StructField:
     def to_dict(self) -> dict:
         return {
             'name': self.name,
-            'dtype': self.dtype.to_dict()
+            'dtype': self.dtype.to_dict() if self.dtype else None
         }
 
     @staticmethod
