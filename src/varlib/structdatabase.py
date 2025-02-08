@@ -143,7 +143,7 @@ class StructDatabase:
     def map_union_type_empty(self, tuid:str, name:str) -> int:
         return self.map_struct_type(tuid, UnionDefinition(name, UnionLayout()), is_union=True)
 
-    def map_struct_type(self, tuid:str, sdef:Any, is_union:bool) -> int:
+    def map_struct_type(self, tuid:str, sdef:Any, is_union:bool, force_sid:int=None) -> int:
         '''
         Maps stype into the given translation unit and returns the sid for the
         resulting structure.
@@ -154,10 +154,11 @@ class StructDatabase:
         # at this point, since map_struct_type() is called BEFORE the StructDefinition is
         # filled out (and that is by design to avoid recursion issues)
 
-        # assume this is a new type...either brand new name or a unique def for an existing name
-        # --> map as new type
-        new_sid = self._next_sid
-        self._next_sid += 1
+        if force_sid:
+            new_sid = force_sid     # this is for maintaining existing sids
+        else:
+            new_sid = self._next_sid
+            self._next_sid += 1
 
         # 1) map the sid to the definition itself
         if is_union:

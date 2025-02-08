@@ -6,7 +6,7 @@ if typing.TYPE_CHECKING:
 # CLS: this should only be imported if pyhidra has been started
 
 import pandas as pd
-from typing import List
+from typing import List, Dict, Set
 from tqdm import tqdm
 
 import ghidra
@@ -17,10 +17,11 @@ from ghidra.program.model.data import DataTypeManager
 from ghidra.program.model.pcode import HighSymbol
 
 from .projects import *
-from .decompiler import AstDecompiler
+from .decompiler import AstDecompiler, DecompiledFunction, ProgramDecompilation
 from astlib.find_all_references import *
+from varlib.datatype import StructField
 
-def export_func_vars(decompiler:AstDecompiler, func:Function, bid:int=-1, skip_unique_vars:bool=False) -> pd.DataFrame:
+def export_func_vars(fdecomp:DecompiledFunction, bid:int=-1, skip_unique_vars:bool=False) -> pd.DataFrame:
     '''
     Exports a table describing the AST variables and their data types for the
     locals and parameters of the given function.
@@ -29,7 +30,6 @@ def export_func_vars(decompiler:AstDecompiler, func:Function, bid:int=-1, skip_u
         'BinaryId','FunctionStart','Signature','Vartype','Name','Location','Type','TypeJson',
     ]
 
-    fdecomp = decompiler.decompile(func)
     tudecl = fdecomp.ast
 
     if not tudecl:
@@ -59,30 +59,83 @@ def export_vars(decompiler:AstDecompiler, func_list:List[Function], bid:int=-1, 
     specified function list
     '''
     return pd.concat(
-            [export_func_vars(decompiler, f, bid, skip_unique_vars) for f in tqdm(func_list, desc=status_msg if status_msg else decompiler.program.name)]
+            [export_func_vars(decompiler.decompile(f), bid, skip_unique_vars)
+                for f in tqdm(
+                    func_list,
+                    desc=status_msg if status_msg else decompiler.program.name
+                )
+            ]
         ).reset_index(drop=True)
 
 class ProgramExport:
-    def __init__(self, vars_df:pd.DataFrame, sdb:StructDatabase):
+    def __init__(self, vars_df:pd.DataFrame, sdb:StructDatabase, accessed_sdb:StructDatabase=None):
         self.vars_df = vars_df
         self.sdb = sdb
+        self.accessed_sdb = accessed_sdb
 
-def export_program(proj:GhidraProject, bin_file:DomainFile, limit_funcs:int=None,
-                        skip_unique_vars:bool=False) -> ProgramExport:
-    # force-fitting this in here a little bit for now, but I don't want to go change the existing
-    # dragon-oriented api of export_program_vars at the moment
-    sdbs, vars_df = export_program_vars(proj, [bin_file], limit_funcs, skip_unique_vars, return_sdbs=True)
-    return ProgramExport(vars_df, sdbs[0])
+class CollectStructMemberRefs(VisitAllChildrenByDefaultVisitor):
+    def __init__(self):
+        '''
+        ast: The AST to search for MemberExpr nodes
+        '''
+        super().__init__()
+        # self.member_exprs:List[MemberExpr] = []
+
+    def visit_MemberExpr(self, memexpr:MemberExpr):
+        # self.member_exprs.append(memexpr)
+        return memexpr
+
+def build_accessed_sdb(pdecomp:ProgramDecompilation) -> StructDatabase:
+    accessed_offsets_by_sid:Dict[int,Set[int]] = {}     # map sid -> set(offsets)
+
+    # gather all member references across entire program
+    member_refs = [x for fd in pdecomp.decompiled_functions for x in CollectStructMemberRefs().visit(fd.ast)]
+
+    for mref in member_refs:
+        if mref.parent_struct:
+            sid = mref.parent_struct.sid
+            if sid not in accessed_offsets_by_sid:
+                accessed_offsets_by_sid[sid] = set()
+            accessed_offsets_by_sid[sid].add(mref.offset)
+
+    accessed_sdb = StructDatabase()
+
+    for sid, offsets in accessed_offsets_by_sid.items():
+        full_sdef = pdecomp.sdb.structs_by_id[sid]
+        access_sdef = StructDefinition(
+            full_sdef.name,
+            # check if off actually is a real structure offset before indexing, since
+            # Ghidra generates "fake" member accesses sometimes
+            {off: full_sdef.layout[off] for off in offsets if off in full_sdef.layout},
+            ghidra_uid=full_sdef.ghidra_uid
+        )
+        accessed_sdb.map_struct_type('', access_sdef, is_union=False, force_sid=sid)
+
+    return accessed_sdb
+
+def export_program(proj:GhidraProject, bin_file:DomainFile,
+                    limit_funcs:int=None,
+                    skip_unique_vars:bool=False, status_msg:str='Exporting program data',
+                    bid:int=-1) -> ProgramExport:
+
+    with GhidraCheckoutProgram(proj, bin_file, bid=bid) as co:
+        nonthunks = co.decompiler.nonthunk_functions[:limit_funcs]
+        pdecomp = co.decompiler.export_program_decompilation(status_msg, nonthunks)
+        vars_df = pd.concat([
+            export_func_vars(fd, bid, skip_unique_vars) for fd in pdecomp.decompiled_functions
+        ]).reset_index(drop=True)
+        accessed_sdb = build_accessed_sdb(pdecomp)
+
+    return ProgramExport(vars_df, pdecomp.sdb, accessed_sdb)
 
 def export_program_vars(proj:GhidraProject, bin_files:List[DomainFile], limit_funcs:int=None,
-                        skip_unique_vars:bool=False, return_sdbs:bool=False) -> pd.DataFrame:
+                        skip_unique_vars:bool=False) -> pd.DataFrame:
     '''
     Exports the debug variable types to a combined data frame for the given binaries
     '''
     # the reason to make this debug-specific is because we only care about
     # the data types - we don't need to export the ASTs themselves
     bin_vdfs = []
-    sdbs = []
 
     # remap BinaryId to ensure uniqueness across runs (OrigBinaryId/RunId maps new id to original)
     base_gid = 1000
@@ -96,12 +149,10 @@ def export_program_vars(proj:GhidraProject, bin_files:List[DomainFile], limit_fu
         with GhidraCheckoutProgram(proj, bin_file, bid=bid) as co:
             nonthunks = co.decompiler.nonthunk_functions[:limit_funcs]
             vdf = export_vars(co.decompiler, nonthunks, bid, skip_unique_vars)
-            sdbs.append(co.decompiler.export_program_struct_db())
             # save mapping to original runid/bid
             vdf['Binary'] = binary_name
             vdf['OrigBinaryId'] = orig_bid
             vdf['RunId'] = rid
             bin_vdfs.append(vdf)
 
-    var_df = pd.concat(bin_vdfs).reset_index(drop=True)
-    return (sdbs, var_df) if return_sdbs else var_df
+    return pd.concat(bin_vdfs).reset_index(drop=True)
