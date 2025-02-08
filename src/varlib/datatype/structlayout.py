@@ -13,7 +13,7 @@ class StructField:
 
     @property
     def size(self):
-        return self.dtype.size
+        return self.dtype.size if self.dtype else 1     # if dtype is none, we don't know true size, but at least 1B
 
     def __str__(self):
         return f'{self.dtype} {self.name}'

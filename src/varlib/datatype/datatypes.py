@@ -490,7 +490,8 @@ class ArrayType(DataType):
 
     @property
     def size(self):
-        return self.num_elements * self.element_type.size if self.num_elements else 0
+        num_elements = self.num_elements if self.num_elements else 1    # assume at least 1 element (if we have no num_elements specified yet)
+        return num_elements * self.element_type.size
 
     @property
     def type_sequence_str(self) -> str:
