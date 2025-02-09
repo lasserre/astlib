@@ -532,13 +532,25 @@ class MemberExpr(ASTNode):
         self.is_arrow = is_arrow
         self.sdb = sdb
 
+        # used when constructing a member graph to temporarily
+        # mask out the data types of MemberExpr nodes
+        self._hide_dtype = False
+
     def __repr__(self) -> str:
         member_access = '->' if self.is_arrow else '.'
         return f'{self.inner[0]}{member_access}{self.name} (offset={self.offset:#x}, sid={self.sid})'
 
+    def mask_dtype(self):
+        self._hide_dtype = True
+
+    def unmask_dtype(self):
+        self._hide_dtype = False
+
     @property
     def dtype(self) -> DataType:
-        if self.parent_struct:
+        if self._hide_dtype:        # don't even try, if we wish to hide this data type
+            return None
+        elif self.parent_struct:
             return self.parent_struct.layout[self.offset].dtype
         elif self.parent_union:
             # have to match union field by name
