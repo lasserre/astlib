@@ -35,6 +35,7 @@ from ghidra.util.task import ConsoleTaskMonitor
 # Caleb's stuff (astlib)
 from varlib import datatype, StructDatabase
 from varlib.datatype import StructDefinition
+from .datatypes import to_varlib_dtype, _struct_to_varlib
 
 # Normal python stuff
 from typing import Dict, List
@@ -101,12 +102,12 @@ class GhidraRetyper:
         # CLS: return None if multiple matches to catch any issues here - we expect unique retyped names
         return matching_structs[0].key if len(matching_structs) == 1 else None
 
-    def define_all_reference_types(self, sdb:StructDatabase, overwrite_existing:bool=False, subset_names:List[str]=None):
+    def define_all_reference_types(self, sdb:StructDatabase, overwrite_existing:bool=False, subset_sids:List[int]=None):
         '''
         Define all of the structure and union types in the reference StructDatabase
         (prior to retyping any variables)
 
-        subset_names: A subset of structure names which exist in sdb that should be defined (skipping the rest)
+        subset_sids: A subset of structure sids which exist in sdb that should be defined (skipping the rest)
         '''
         # NOTE - don't simply call define_new_structure() iteratively here so we can
         # support definining "complete" data types in an sdb (that may reference other
@@ -114,8 +115,8 @@ class GhidraRetyper:
         structs = sdb.structs_by_id
         unions = sdb.unions_by_id
 
-        struct_subset = {k: v for k, v in structs.items() if v.name in subset_names} if subset_names else structs
-        union_subset = {k: v for k, v in unions.items() if v.name in subset_names} if subset_names else unions
+        struct_subset = {k: v for k, v in structs.items() if k in subset_sids} if subset_sids else structs
+        union_subset = {k: v for k, v in unions.items() if k in subset_sids} if subset_sids else unions
 
         # only check conflicts for types we wish to define
         # NOTE: when we export Ghidra typdefs by resolving to canonical type we will end up with
@@ -131,6 +132,7 @@ class GhidraRetyper:
             new_struct = StructureDataType(self.struct_category_path, sdef.name, 0)
             # CLS NOTE: Dylan had "None" as the 2nd argument instead of "overwrite_existing"
             self.add_to_data_type_manager(new_struct, overwrite_existing)
+
         for uid, udef in union_subset.items():
             # Define empty union
             new_union = UnionDataType(self.union_category_path, udef.name)
@@ -156,14 +158,17 @@ class GhidraRetyper:
         new_gdt = self.dtype_mgr.getDataType(new_sid)
         return self.dtype_mgr.replaceDataType(orig_gdt, new_gdt, update_category_path)
 
-    def add_to_data_type_manager(self, dtype:DataType, overwrite_existing:bool=False):
+    def add_to_data_type_manager(self, dtype:DataType, overwrite_existing:bool=False) -> DataType:
+        '''
+        Add to data type manager and return resulting Ghidra data type
+        '''
         # Determine conflict resolution policy
         if overwrite_existing:
             conflict_resolution_policy = DataTypeConflictHandler.REPLACE_HANDLER
         else:
             conflict_resolution_policy = DataTypeConflictHandler.KEEP_HANDLER
         # Add data type to dtm with appropriate conflict resolutin set
-        self.dtype_mgr.addDataType(dtype, conflict_resolution_policy)
+        return self.dtype_mgr.addDataType(dtype, conflict_resolution_policy)
 
     def define_struct_type(self, sdef:datatype.StructDefinition, overwrite_existing:bool=False):
         ghidra_dtype_path = f'{self.struct_category_path}/{sdef.name}'

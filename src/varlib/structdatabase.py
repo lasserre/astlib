@@ -180,6 +180,24 @@ class StructDatabase:
 
         return new_sid
 
+    def remove_struct(self, sid:int, tuid:str=''):
+        if sid in self.structs_by_id:
+            sname = self.structs_by_id[sid].name
+            del self.sid_by_tu_and_name[tuid][sname]
+            del self.structs_by_id[sid]
+            if len(self.sids_by_name[sname]) > 1:
+                self.sids_by_name[sname] = [x for x in self.sids_by_name[sname] if x != sid]
+            else:
+                del self.sids_by_name[sname]
+        elif sid in self.unions_by_id:
+            uname = self.unions_by_id[sid].name
+            del self.uid_by_tu_and_name[tuid][uname]
+            del self.unions_by_id[sid]
+            if len(self.sids_by_name[uname]) > 1:
+                self.sids_by_name[uname] = [x for x in self.sids_by_name[uname] if x != sid]
+            else:
+                del self.sids_by_name[uname]
+
     def update_struct_definition(self, sid:int, sdef:StructDefinition):
         '''
         Updates the structure definition in the database, invalidating any stale state
