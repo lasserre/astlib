@@ -274,12 +274,22 @@ class GhidraRetyper:
             raise Exception(f'ERROR: BUILTIN {dtype.standard_name} not found')
         return ghidra_dtype
 
-    def convert_struct_dtype(self, dtype:datatype.DataType):
+    def convert_struct_dtype(self, dtype:datatype.StructType):
         # Generate path and find in program dtm
         ghidra_dtype_path = f'{self.struct_category_path}/{dtype.name}'
         ghidra_dtype = self.dtype_mgr.getDataType(ghidra_dtype_path)
-        if ghidra_dtype == None:
+
+        if not ghidra_dtype:
+            # maybe this is an external structure (one we did not recover)
+            # --> try to find it by id
+            ghidra_dtype = self.dtype_mgr.getDataType(dtype.sid)
+            if ghidra_dtype:
+                # resolve to canonical type, as we do when we export (we aren't handling typedefs in saphira logic right now)
+                ghidra_dtype = ghidra_dtype.baseDataType
+
+        if not ghidra_dtype:
             raise Exception(f'ERROR: STRUCT {dtype.name} not found')
+
         return ghidra_dtype
 
     def convert_union_dtype(self, dtype:datatype.DataType):
