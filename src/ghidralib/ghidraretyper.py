@@ -36,6 +36,7 @@ from ghidra.util.task import ConsoleTaskMonitor
 from varlib import datatype, StructDatabase
 from varlib.datatype import StructDefinition
 from .datatypes import to_varlib_dtype, _struct_to_varlib
+from .export_types import update_ghidra_struct_in_sdb
 
 # Normal python stuff
 from typing import Dict, List
@@ -101,6 +102,13 @@ class GhidraRetyper:
             return -1
         # CLS: return None if multiple matches to catch any issues here - we expect unique retyped names
         return matching_structs[0].key if len(matching_structs) == 1 else None
+
+    def update_ghidra_struct_in_sdb(self, sdb:StructDatabase, struct_name:str) -> int:
+        '''
+        Updates the given struct name in sdb (assumes only one name matches) and
+        returns the sid, or None if it was not found
+        '''
+        return update_ghidra_struct_in_sdb(self.dtype_mgr, struct_name, sdb)
 
     def define_all_reference_types(self, sdb:StructDatabase, overwrite_existing:bool=False, subset_sids:List[int]=None):
         '''

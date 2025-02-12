@@ -29,6 +29,20 @@ def get_union_definition(utype:ghidra.program.model.data.Union) -> UnionDefiniti
     ghidra_uid = utype.universalID.value    # save this since sids are DIFFERENT
     return UnionDefinition(utype.name, get_union_layout(utype), ghidra_uid=ghidra_uid)
 
+def update_ghidra_struct_in_sdb(dtmgr:DataTypeManager, struct_name:str, sdb:StructDatabase) -> int:
+    '''
+    Updates the given Ghidra structure in the sdb by mapping its sid in structs_by_id.
+    We simply take the first match, so duplicate names won't work here
+    '''
+    matches = [x for x in dtmgr.allComposites if x.name == struct_name]
+    if not matches:
+        return None
+    gdt = matches[0]
+    dtype = to_varlib_dtype(gdt, gdt.length)
+    sdb.structs_by_id[dtype.sid] = get_struct_definition(gdt)
+    sdb.build_sids_by_name()
+    return dtype.sid
+
 def export_ghidra_types_to_sdb(dtmgr:DataTypeManager, progress_bar:bool=True) -> StructDatabase:
     # Ghidra already has unique ids - just construct structs/unions_by_id manually
     sdb = StructDatabase()
