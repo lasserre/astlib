@@ -1,6 +1,7 @@
 import itertools
 from itertools import takewhile
 import json
+import re
 import sys, inspect
 from pathlib import Path
 from typing import Callable, Any, List, Dict, Tuple
@@ -547,11 +548,21 @@ class MemberExpr(ASTNode):
         self._hide_dtype = False
 
     @property
+    def has_fake_ghidra_fieldname(self) -> bool:
+        return bool(re.match('field_0x([0-9a-f]+)', self.name))
+
+    @property
     def dtype(self) -> DataType:
         if self._hide_dtype:        # don't even try, if we wish to hide this data type
             return None
         elif self.parent_struct:
-            return self.parent_struct.layout[self.offset].dtype
+            if self.offset in self.parent_struct.layout:
+                return self.parent_struct.layout[self.offset].dtype
+            elif self.has_fake_ghidra_fieldname:
+                return None     # this is not our fault! haha
+            # NOTE: we can remove this if we don't need to be this strict, but for now
+            # leaving it to help catch any preventable errors
+            raise Exception(f'Valid parent struct but no entry for offset 0x{self.offset:x}')
         elif self.parent_union:
             # have to match union field by name
             return [f for f in self.parent_union.layout.fields if f.name == self.name][0].dtype
