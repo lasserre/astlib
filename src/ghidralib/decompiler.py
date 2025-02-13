@@ -7,6 +7,7 @@ if typing.TYPE_CHECKING:
 
 from typing import List, Dict, Tuple
 import pandas as pd
+from rich.console import Console
 from tqdm import tqdm
 
 import ghidra
@@ -60,7 +61,21 @@ class ProgramDecompilation:
     '''
     def __init__(self, decompiled_funcs:List[DecompiledFunction], sdb:StructDatabase):
         self.decompiled_functions = decompiled_funcs
+        self.failed_decompilations = []
         self.sdb = sdb
+        self.console = Console()
+
+        self._filter_failed_decomps()
+
+    def _filter_failed_decomps(self):
+        '''
+        Separates failed decompilations into self.failed_decompilations, removing them
+        from the decompiled_functions list
+        '''
+        self.failed_decompilations = [fd for fd in self.decompiled_functions if not fd.ast]
+        if self.failed_decompilations:
+            self.console.print(f'[yellow]{len(self.failed_decompilations):,} functions failed to decompile')
+            self.decompiled_functions = [fd for fd in self.decompiled_functions if fd.ast]      # filter down to only good ones
 
 class AstDecompiler:
     AST_DELIM = '#$#$# BEGIN AST #@#@#'
