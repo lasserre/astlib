@@ -39,7 +39,7 @@ def update_ghidra_struct_in_sdb(dtmgr:DataTypeManager, struct_name:str, sdb:Stru
         return None
     gdt = matches[0]
     dtype = to_varlib_dtype(gdt, gdt.length)
-    sdb.structs_by_id[dtype.sid] = get_struct_definition(gdt)
+    sdb.map_struct_type('', get_struct_definition(gdt), is_union=False, force_sid=dtype.sid)
     sdb.build_sids_by_name()
     return dtype.sid
 

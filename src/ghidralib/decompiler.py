@@ -117,14 +117,18 @@ class AstDecompiler:
         '''
         return export_ghidra_types_to_sdb(self.datatype_mgr, progress_bar)
 
-    def export_program_decompilation(self, status_msg:str, funclist:List[Function]=None) -> ProgramDecompilation:
+    def export_program_decompilation(self, status_msg:str, funclist:List[Function]=None, sdb:StructDatabase=None) -> ProgramDecompilation:
         '''
         Export all non-thunk functions in the program (or the functions from funclist if specified)
         as well as the StructureDatabase for the program, and return the result as a
         ProgramDecompilation
+
+        status_msg: Status message to show for decompilation progress bar
+        funclist: List of functions to decompile, or all nonthunk functions will be decompiled if not specified
+        sdb: If an up-to-date sdb is available, it may be specified here to avoid re-exporting the entire program sdb
         '''
         funclist = funclist if funclist else self.nonthunk_functions
-        sdb = self.export_program_struct_db()
+        sdb = self.export_program_struct_db() if sdb is None else sdb
         return ProgramDecompilation([self.decompile(f, sdb) for f in tqdm(funclist, desc=status_msg)], sdb)
 
     @staticmethod
