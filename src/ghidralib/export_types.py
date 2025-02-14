@@ -16,7 +16,7 @@ def get_field(dt_comp:ghidra.program.model.data.DataTypeComponent):
     return StructField(to_varlib_dtype(dt_comp.getDataType(), dt_comp.getLength()), dt_comp.getFieldName())
 
 def get_struct_layout(stype:ghidra.program.model.data.Structure) -> StructLayout:
-    return StructLayout({x.getOffset(): get_field(x) for x in stype.getComponents()})
+    return StructLayout({x.getOffset(): get_field(x) for x in stype.getDefinedComponents()})
 
 def get_struct_definition(stype:ghidra.program.model.data.Structure) -> StructDefinition:
     ghidra_uid = stype.universalID.value    # save this since sids are DIFFERENT
