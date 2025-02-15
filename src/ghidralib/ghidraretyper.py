@@ -16,7 +16,7 @@ from ghidra.app.decompiler import DecompInterface
 
 from ghidra.program.model.data import DataType
 from ghidra.program.model.data import FunctionDefinitionDataType
-from ghidra.program.model.data import StructureDataType
+from ghidra.program.model.data import StructureDataType, TypeDef
 from ghidra.program.model.data import UnionDataType
 from ghidra.program.model.data import PointerDataType
 from ghidra.program.model.data import ArrayDataType
@@ -283,7 +283,7 @@ class GhidraRetyper:
             # maybe this is an external structure (one we did not recover)
             # --> try to find it by id
             ghidra_dtype = self.dtype_mgr.getDataType(dtype.sid)
-            if ghidra_dtype:
+            if ghidra_dtype and isinstance(ghidra_dtype, TypeDef):
                 # resolve to canonical type, as we do when we export (we aren't handling typedefs in saphira logic right now)
                 ghidra_dtype = ghidra_dtype.baseDataType
 
