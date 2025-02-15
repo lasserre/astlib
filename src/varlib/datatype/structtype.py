@@ -231,7 +231,7 @@ class UnionType(DataType):
 
     @property
     def size(self):
-        return max(f.size for f in self.fields)
+        return max(f.size for f in self.fields) if self.fields else 1
 
     @property
     def type_sequence_str(self) -> str:

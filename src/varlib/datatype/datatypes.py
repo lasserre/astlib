@@ -33,6 +33,8 @@ class DataType:
 
     @staticmethod
     def from_dict(d:dict, sdb) -> 'DataType':
+        if d is None:
+            return None     # support dirty types being stored in RetypedVariablesDatabase
         if d['kind'] not in _dt_from_dict_methods:
             raise NotImplementedError(f'DataType kind {d["kind"]} not mapped to a from_dict method')
         return _dt_from_dict_methods[d['kind']](d, sdb)

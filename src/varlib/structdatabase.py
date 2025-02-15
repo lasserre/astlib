@@ -88,8 +88,8 @@ class StructDatabase:
             sdb.uid_by_tu_and_name = d['uid_by_tu_and_name']
 
         # idk that we need it, but reset this so if we add a new struct its ready to go
-        max_struct_id = max(sdb.structs_by_id.keys()) + 1
-        max_union_id = max(sdb.unions_by_id.keys()) + 1
+        max_struct_id = max(sdb.structs_by_id.keys()) + 1 if sdb.structs_by_id else 0
+        max_union_id = max(sdb.unions_by_id.keys()) + 1 if sdb.unions_by_id else 0
 
         sdb._next_sid = max(max_struct_id, max_union_id)
         return sdb
