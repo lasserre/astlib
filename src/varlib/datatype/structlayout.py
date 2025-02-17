@@ -21,6 +21,10 @@ class StructField:
     def __eq__(self, other, dtchain:List[str]=None):
         if not isinstance(other, StructField):
             return False
+        elif self.dtype is None or other.dtype is None:
+            # one of their dtypes is None
+            return self.dtype == other.dtype    # equal if they are both None
+
         # NOTE: field name is not part of the comparison, just for readability
         return self.dtype.__eq__(other.dtype, dtchain)
 
