@@ -164,7 +164,9 @@ class GhidraRetyper:
         '''
         orig_gdt = self.dtype_mgr.getDataType(orig_sid)
         new_gdt = self.dtype_mgr.getDataType(new_sid)
-        return self.dtype_mgr.replaceDataType(orig_gdt, new_gdt, update_category_path)
+        if new_get:
+            return self.dtype_mgr.replaceDataType(orig_gdt, new_gdt, update_category_path)
+        return None
 
     def add_to_data_type_manager(self, dtype:DataType, overwrite_existing:bool=False) -> DataType:
         '''

@@ -562,7 +562,9 @@ class MemberExpr(ASTNode):
                 return None     # this is not our fault! haha
             # NOTE: we can remove this if we don't need to be this strict, but for now
             # leaving it to help catch any preventable errors
-            raise Exception(f'Valid parent struct but no entry for offset 0x{self.offset:x}')
+            # raise Exception
+            print(f'Valid parent struct but no entry for offset 0x{self.offset:x}')
+            return None
         elif self.parent_union:
             # have to match union field by name
             return [f for f in self.parent_union.layout.fields if f.name == self.name][0].dtype
