@@ -116,9 +116,9 @@ def build_accessed_sdb(pdecomp:ProgramDecompilation) -> StructDatabase:
 def export_program(proj:GhidraProject, bin_file:DomainFile,
                     limit_funcs:int=None,
                     skip_unique_vars:bool=False, status_msg:str='Exporting program data',
-                    bid:int=-1) -> ProgramExport:
+                    bid:int=-1, terminate_existing_checkouts:bool=False) -> ProgramExport:
 
-    with GhidraCheckoutProgram(proj, bin_file, bid=bid) as co:
+    with GhidraCheckoutProgram(proj, bin_file, bid=bid, terminate_existing_checkouts=terminate_existing_checkouts) as co:
         nonthunks = co.decompiler.nonthunk_functions[:limit_funcs]
         pdecomp = co.decompiler.export_program_decompilation(status_msg, nonthunks)
         vars_df = pd.concat([

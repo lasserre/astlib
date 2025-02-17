@@ -205,7 +205,8 @@ class GhidraCheckoutProgram:
     '''
     def __init__(self, proj:GhidraProject, domain_file:DomainFile, read_only:bool=False, exclusive:bool=False,
                 task_monitor=None,
-                bid:int=-1, decomp_timeout_sec:int=240, decomp_opts:DecompileOptions=None) -> None:
+                bid:int=-1, decomp_timeout_sec:int=240, decomp_opts:DecompileOptions=None,
+                terminate_existing_checkouts:bool=False) -> None:
         self.proj = proj
         self.domain_file = domain_file
         self.read_only = read_only
@@ -213,6 +214,7 @@ class GhidraCheckoutProgram:
         self.monitor = task_monitor
         self.checkin_msg = ''   # client code should set this inside the with block to set their commit msg
         self.program:Program = None
+        self.terminate_existing_checkouts = terminate_existing_checkouts
 
         # decompiler options
         self.bid = bid
@@ -229,7 +231,12 @@ class GhidraCheckoutProgram:
     def __enter__(self) -> 'GhidraCheckoutProgram':
         success = self.domain_file.checkout(self.exclusive, self.monitor)
         if not success:
-            raise Exception(f'Unable to checkout domain file {self.domain_file}')
+            if self.terminate_existing_checkouts:
+                # terminate all checkouts and try again (we may have dangling references)
+                terminate_all_checkouts(self.domain_file)
+                success = self.domain_file.checkout(self.exclusive, self.monitor)
+            if not success:
+                raise Exception(f'Unable to checkout domain file {self.domain_file}')
 
         self.program = self.proj.openProgram(self.domain_file.parent.pathname, self.domain_file.name, self.read_only)
 
