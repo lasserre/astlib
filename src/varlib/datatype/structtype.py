@@ -36,7 +36,7 @@ class StructType(DataType):
     @property
     def name(self):
         '''The name of the structure'''
-        if self._db is None:
+        if self._db is None or self.sid not in self._db.structs_by_id:
             return self._local_name
         return '' if self.sid < 0 else self._db.structs_by_id[self.sid].name
 
