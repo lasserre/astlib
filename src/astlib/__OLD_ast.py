@@ -104,12 +104,10 @@ def to_varlib_dtype(node:ASTNode, typename_basic:bool=False) -> datatype.DataTyp
     elif node.kind == 'EnumType':
         return datatype.EnumType(node.name)
     elif node.kind == 'FunctionType':
+        return_type = None if typename_basic else to_varlib_dtype(node.return_dtype)
+        params = [] if typename_basic else [to_varlib_dtype(p) for p in node.inner]
         # NOTE: node.name is not what I want ideally (rather have the typedef name)...but at least it's consistent
-        fptype = datatype.FunctionType(None, [], node.name)
-        if not typename_basic:
-            fptype.return_dtype = to_varlib_dtype(node.return_dtype)
-            fptype.params = [to_varlib_dtype(p) for p in node.inner]
-        return fptype
+        return datatype.FunctionType(return_type, params, node.name)
     elif node.kind == 'TypedefType':
         # convert to canonical type (remove typdefs)
         return to_varlib_dtype(node.decl.inner[0], typename_basic)

@@ -21,9 +21,13 @@ class StructType(DataType):
     def __init__(self, db:'StructDatabase', sid:int=-1, is_class:bool=False, name:str='') -> None:
         super().__init__(DataTypeCategories.Struct)
 
-        self.sid = sid
+        self._sid = sid
         self._db = db
         self._local_name = name     # a name we can show for cases where we don't have the StructDatabase
+
+    @property
+    def sid(self) -> int:
+        return self._sid
 
     @property
     def empty(self) -> bool:
@@ -91,15 +95,13 @@ class StructType(DataType):
     def __repr__(self) -> str:
         return str(self._struct_def) if self._db else f'struct {self} (sid={self.sid})'
 
-    def __eq__(self, other, dtchain:List[str]=None):
+    def __eq__(self, other):
         if not isinstance(other, StructType):
             return False
-        if self._struct_def is None:
-            return other._struct_def is None    # technically equal :)
-        return self._struct_def.__eq__(other._struct_def, dtchain)
+        return self.sid == other.sid
 
     def __hash__(self):
-        return hash(self.name)      # you know, these are generally unique! lol
+        return hash(self.sid)      # you know, these are generally unique! lol
 
     def to_dict(self) -> dict:
         return {
@@ -187,9 +189,13 @@ class UnionType(DataType):
     '''
     def __init__(self, db:'StructDatabase', sid:int=-1, name:str='') -> None:
         super().__init__(DataTypeCategories.Union)
-        self.sid = sid
+        self._sid = sid
         self._db = db
         self._local_name = name     # a name we can show for cases where we don't have the StructDatabase
+
+    @property
+    def sid(self) -> int:
+        return self._sid
 
     @property
     def name(self):
@@ -260,12 +266,10 @@ class UnionType(DataType):
     def __hash__(self):
         return hash(tuple(self.fields))
 
-    def __eq__(self, other, dtchain:List[str]=None):
+    def __eq__(self, other):
         if not isinstance(other, UnionType):
             return False
-        if self._union_def is None:
-            return other._union_def is None    # technically equal :)
-        return self._union_def.__eq__(other._union_def, dtchain)
+        return self.sid == other.sid
 
     def to_dict(self) -> dict:
         return {

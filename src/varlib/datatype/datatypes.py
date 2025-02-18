@@ -220,11 +220,15 @@ class BuiltinType(DataType):
     def __init__(self, name:str,
                  floating_point:bool, signed:bool, size:int, boolean:bool=False) -> None:
         super().__init__(DataTypeCategories.BuiltIn)
-        self.name = name
-        self.floating_point = floating_point
-        self.signed = signed
-        self.boolean = boolean
+        self._name = name
+        self._floating_point = floating_point
+        self._signed = signed
+        self._boolean = boolean
         self._size = size
+
+    @property
+    def name(self) -> str:
+        return self._name
 
     @property
     def primitive_size(self) -> int:
@@ -244,15 +248,15 @@ class BuiltinType(DataType):
 
     @property
     def is_floating(self) -> bool:
-        return self.floating_point
+        return self._floating_point
 
     @property
     def is_signed(self) -> bool:
-        return self.signed
+        return self._signed
 
     @property
     def is_bool(self) -> bool:
-        return self.boolean
+        return self._boolean
 
     @staticmethod
     def get_std_names() -> List[str]:
@@ -293,7 +297,7 @@ class BuiltinType(DataType):
             return 'bool'
         if self.is_void:
             return 'void'
-        if self.floating_point:
+        if self.is_floating:
             if self.size in _builtin_floats_by_size:
                 return _builtin_floats_by_size[self.size]
             elif self.size == 16:
@@ -301,7 +305,7 @@ class BuiltinType(DataType):
                 # but allow for 16B/10B floats to both be treated as long doubles here
                 return 'long double'
             return f'UNMAPPED_FLOAT_{self.size}'
-        if self.signed:
+        if self.is_signed:
             if self.size not in _builtin_ints_by_size:
                 # same as below...
                 if self.size < 4:
@@ -337,16 +341,16 @@ class BuiltinType(DataType):
     def __repr__(self) -> str:
         return str(self)
 
-    def __eq__(self, other, dtchain:List[str]=None):
+    def __eq__(self, other):
         if not isinstance(other, BuiltinType):
             return False
-        return self.floating_point == other.floating_point and \
-            self.signed == other.signed and \
+        return self.is_floating == other.is_floating and \
+            self.is_signed == other.is_signed and \
             self.size == other.size and \
-            self.boolean == other.boolean
+            self.is_bool == other.is_bool
 
     def __hash__(self):
-        return hash((self.floating_point, self.signed, self.size, self.boolean))
+        return hash((self.is_floating, self.is_signed, self.size, self.is_bool))
 
     @staticmethod
     def create_void_type():
@@ -387,10 +391,10 @@ class BuiltinType(DataType):
         return {
             **self._get_base_dict(),
             'name': self.name,
-            'is_fp': self.floating_point,
-            'signed': self.signed,
+            'is_fp': self.is_floating,
+            'signed': self.is_signed,
             'size': self.size,
-            'boolean': self.boolean
+            'boolean': self.is_bool
         }
 
     @staticmethod
@@ -409,8 +413,16 @@ class PointerType(DataType):
     '''
     def __init__(self, pointed_to:DataType, pointer_size:int) -> None:
         super().__init__(DataTypeCategories.Pointer)
-        self.pointed_to = pointed_to
-        self.pointer_size = pointer_size
+        self._pointed_to = pointed_to
+        self._pointer_size = pointer_size
+
+    @property
+    def pointed_to(self) -> DataType:
+        return self._pointed_to
+
+    @property
+    def pointer_size(self) -> int:
+        return self._pointer_size
 
     @property
     def inner(self):
@@ -457,11 +469,10 @@ class PointerType(DataType):
     def __repr__(self) -> str:
         return str(self)
 
-    def __eq__(self, other, dtchain:List[str]=None):
+    def __eq__(self, other):
         if not isinstance(other, PointerType):
             return False
-        # pass the dtchain along, but we don't need to add anything to it
-        return self.pointed_to.__eq__(other.pointed_to, dtchain)
+        return self.pointed_to.__eq__(other.pointed_to)
 
     def __hash__(self):
         return hash((self.pointed_to,))
@@ -483,8 +494,16 @@ class ArrayType(DataType):
     '''
     def __init__(self, element_type:DataType, num_elements:int) -> None:
         super().__init__(DataTypeCategories.Array)
-        self.element_type = element_type
-        self.num_elements = num_elements
+        self._element_type = element_type
+        self._num_elements = num_elements
+
+    @property
+    def num_elements(self) -> int:
+        return self._num_elements
+
+    @property
+    def element_type(self) -> DataType:
+        return self._element_type
 
     @property
     def inner(self):
@@ -527,12 +546,11 @@ class ArrayType(DataType):
     def __repr__(self) -> str:
         return str(self)
 
-    def __eq__(self, other, dtchain:List[str]=None):
+    def __eq__(self, other):
         if not isinstance(other, ArrayType):
             return False
-        # pass the dtchain along, we don't need to add anything though
         return self.num_elements == other.num_elements and \
-               self.element_type.__eq__(other.element_type, dtchain)
+               self.element_type == other.element_type
 
     def __hash__(self):
         return hash((self.num_elements, self.element_type))
@@ -551,12 +569,16 @@ class ArrayType(DataType):
 class EnumType(DataType):
     def __init__(self, name:str, dt_size:int=4) -> None:
         super().__init__(DataTypeCategories.Enum)
-        self.name = name
-        self.dt_size = dt_size  # don't know if we need this, assume 4B int for now
+        self._name = name
+        self._dt_size = dt_size  # don't know if we need this, assume 4B int for now
+
+    @property
+    def name(self) -> str:
+        return self._name
 
     @property
     def size(self):
-        return self.dt_size
+        return self._dt_size
 
     @property
     def type_sequence_str(self) -> str:
@@ -576,7 +598,7 @@ class EnumType(DataType):
     def __repr__(self) -> str:
         return str(self)
 
-    def __eq__(self, other, dtchain:List[str]=None):
+    def __eq__(self, other):
         if not isinstance(other, EnumType):
             return False
 
@@ -587,7 +609,7 @@ class EnumType(DataType):
         return self.name == other.name
 
     def __hash__(self):
-        return hash((self.name, self.dt_size))
+        return hash((self.name, self.size))
 
     # TODO - if we really care about enums, need to extend this to
     # define the enumerated values (EnumConstantDecl from AST)
@@ -610,9 +632,21 @@ class FunctionType(DataType):
     '''
     def __init__(self, return_dtype:DataType, params:List[DataType], name:str) -> None:
         super().__init__(DataTypeCategories.Function)
-        self.return_dtype = return_dtype
-        self.params = params
-        self.name = name
+        self._return_dtype = return_dtype
+        self._params = params
+        self._name = name
+
+    @property
+    def return_dtype(self) -> DataType:
+        return self._return_dtype
+
+    @property
+    def params(self) -> List[DataType]:
+        return self._params
+
+    @property
+    def name(self) -> str:
+        return self._name
 
     @property
     def size(self):
@@ -638,37 +672,36 @@ class FunctionType(DataType):
     def __repr__(self) -> str:
         return str(self)
 
-    def __eq__(self, other, dtchain:List[str]=None):
+    @staticmethod
+    def func_dtypes_equal(dt1:DataType, dt2:DataType):
+        # only an issue if dt1 and dt2 are BOTH FunctionTypes, so we can just check dt1
+        if 'FUNC' in dt1.type_sequence_str:
+            # compare simple types only to avoid recursing into FunctionType.__eq__
+            return dt1.type_sequence_str == dt2.type_sequence_str
+        return dt1 == dt2       # normal comparison
+
+    def __eq__(self, other):
         if not isinstance(other, FunctionType):
             return False
 
         if self.name != other.name:
             return False
 
-        if not dtchain:
-            dtchain = []
-
-        dtchain_name = f'Funcproto_{self.name}'
-        if dtchain_name in dtchain:
-            return True     # we have cycled around - we are equal
-
-        dtchain.append(dtchain_name)
-
-        if not self.return_dtype.__eq__(other.return_dtype, dtchain):
-            dtchain.pop()
+        # compare param/return types using simple type sequences only
+        # if needed to avoid recursing into FunctionType __eq__() - we don't handle cycles right now
+        # --> thus, we cannot currently differentiate between function pointers which
+        #     accept or return OTHER function pointers of different prototypes
+        #     (not an issue for what I need right now, but later we may want this)
+        if not FunctionType.func_dtypes_equal(self.return_dtype, other.return_dtype):
             return False
 
-        # params
         if len(self.params) != len(other.params):
-            dtchain.pop()
             return False
 
         for i, p in enumerate(self.params):
-            if not p.__eq__(other.params[i], dtchain):
-                dtchain.pop()
+            if not FunctionType.func_dtypes_equal(p, other.params[i]):
                 return False
 
-        dtchain.pop()
         return True
 
     def __hash__(self):

@@ -18,15 +18,10 @@ class StructField:
     def __str__(self):
         return f'{self.dtype} {self.name}'
 
-    def __eq__(self, other, dtchain:List[str]=None):
+    def __eq__(self, other):
         if not isinstance(other, StructField):
             return False
-        elif self.dtype is None or other.dtype is None:
-            # one of their dtypes is None
-            return self.dtype == other.dtype    # equal if they are both None
-
-        # NOTE: field name is not part of the comparison, just for readability
-        return self.dtype.__eq__(other.dtype, dtchain)
+        return self.dtype == other.dtype
 
     def __hash__(self):
         return hash((self.dtype,))
@@ -59,21 +54,18 @@ class StructLayout(dict):
     def __init__(self, *arg, **kw):
         super(StructLayout, self).__init__(*arg, **kw)
 
-    def __eq__(self, other, dtchain:List[str]=None):
+    def __eq__(self, other):
         '''
         NOTE: breaking StructLayout out as its own class separate from StructDefinition
               allows us to implement equality in terms of layout content only, not the
-              structure name; StructDefinition can still check names as part
+              structure name or id; StructDefinition can still check names as part
               of its own equality logic.
         '''
         if not isinstance(other, StructLayout):
             return False
         if set(self.keys()) != set(other.keys()):
             return False    # set of member offsets don't match
-        for off, field in self.items():
-            if not field.__eq__(other[off], dtchain):
-                return False
-        return True
+        return all([field == other[off] for off, field in self.items()])
 
     def __hash__(self):
         # - have to sort keys to guarantee that hash is consistent
@@ -110,36 +102,11 @@ class UnionLayout:
     def __init__(self, fields:List[StructField]=None):
         self.fields = fields if fields else []
 
-    def __eq__(self, other, dtchain:List[str]=None):
+    def __eq__(self, other):
         if not isinstance(other, UnionLayout):
             return False
 
-        if len(self.fields) != len(other.fields):
-            return False
-
-        # sadly we can't use this simple set equality version because we might
-        # see recursively defined Unions (MyUnion { MyUnion* x; })
-        # -------
-        # if set(self.fields) != set(other.fields):
-        #     return False
-
-        # implement "set equality" here but pass the dtchain along
-
-        remaining_fields = list(other.fields)
-
-        for f in self.fields:
-            # find a match in other
-            match_idx = -1
-            for i, other_field in enumerate(remaining_fields):
-                if f.__eq__(other_field, dtchain):
-                    match_idx = i
-                    break
-            if match_idx == -1:
-                return False
-            else:
-                remaining_fields.pop(match_idx)
-
-        return True
+        return set(self.fields) == set(other.fields)
 
     def __hash__(self):
         # - use field.name instead of the field hash to avoid any recursive issues
@@ -187,30 +154,17 @@ class StructDefinition:
         self.is_class = is_class
         self.ghidra_uid = ghidra_uid
 
-    def __eq__(self, other, dtchain:List[str]=None):
+    def __eq__(self, other):
         if not isinstance(other, StructDefinition):
             return False
-        if self.name != other.name:
-            return False
-
-        if not dtchain:
-            dtchain = []
-
-        dtchain_name = f'Struct_{self.name}'
-        if dtchain_name in dtchain:
-            return True     # we have cycled around - we are equal
-
-        dtchain.append(dtchain_name)
-        is_equal = True
-
-        if not self.layout.__eq__(other.layout, dtchain):
-            is_equal = False
-
-        dtchain.pop()
-        return is_equal
+        return self.name == other.name and \
+            self.is_class == other.is_class and \
+            self.ghidra_uid == other.ghidra_uid and \
+            self.layout == other.layout
 
     def __hash__(self):
-        return hash(self.name)      # these tend to be unique for structures...
+        # names are typically unique
+        return hash(self.name, self.ghidra_uid)
 
     def __str__(self):
         tabbed_layout = '\n'.join([f'\t{member}' for member in str(self.layout).split('\n')])
@@ -238,30 +192,15 @@ class UnionDefinition:
         self.layout = layout
         self.ghidra_uid = ghidra_uid
 
-    def __eq__(self, other, dtchain:List[str]=None):
+    def __eq__(self, other):
         if not isinstance(other, UnionDefinition):
             return False
-        if self.name != other.name:
-            return False
-
-        if not dtchain:
-            dtchain = []
-
-        dtchain_name = f'Union_{self.name}'
-        if dtchain_name in dtchain:
-            return True     # we have cycled around - we are equal
-
-        dtchain.append(dtchain_name)
-        is_equal = True
-
-        if not self.layout.__eq__(other.layout, dtchain):
-            is_equal = False
-
-        dtchain.pop()
-        return is_equal
+        return self.name == other.name and \
+            sefl.ghidra_uid == other.ghidra_uid and \
+            self.layout == other.layout
 
     def __hash__(self):
-        return hash(self.name)
+        return hash(self.name, self.ghidra_uid)
 
     def __str__(self):
         tabbed_layout = '\n'.join([f'\t{member}' for member in str(self.layout).split('\n')])

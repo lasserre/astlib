@@ -272,9 +272,8 @@ def die_to_dtype(self:DIE, typedef_name:str='', typename_basic:bool=False) -> Da
         stype = StructTypeBasic(name) if typename_basic else structDIE_to_varlib(self, name, is_class)
         return stype
     elif self.tag == 'DW_TAG_pointer_type':
-        ptype = PointerType(None, self.byte_size)
-        ptype.pointed_to = die_to_dtype(self.type_die, typedef_name, typename_basic) if self.type_die is not None else BuiltinType.create_void_type()
-        return ptype
+        pointed_to = die_to_dtype(self.type_die, typedef_name, typename_basic) if self.type_die is not None else BuiltinType.create_void_type()
+        return PointerType(pointed_to, self.byte_size)
     elif self.tag == 'DW_TAG_base_type':
         is_float, is_signed = getDwarfBaseTypeEncodingAttrs(self.encoding)
         return BuiltinType(self.name, is_float, is_signed, self.byte_size)
@@ -283,16 +282,24 @@ def die_to_dtype(self:DIE, typedef_name:str='', typename_basic:bool=False) -> Da
         subranges = [x for x in self.iter_children() if x.tag == 'DW_TAG_subrange_type']
         arrtype = ArrayType(None, num_elements=1)
 
+        # HACK: converting ArrayType to be immutable, but don't have time to fix this code
+        # right now (which modifies members during construction), and I'm not using it ATM anyway
+        # --> while this is not the right way to do this, it should be ok until we have time
+        #     to come back and fix it, since we construct the whole thing here before handing
+        #     it to anyone who might put it in a hashable collection (which is where you can't let it change)
+        # --> when we do come back and fix this, we just need to build it inside-out and test it
+        #     (which I don't have time for RN)
+
         # for multi-dim array - array dim sizes are in L-R order
         current = arrtype
         for i, arr_dim in enumerate([_get_array_nelems_from_subrange(sr) for sr in subranges]):
-            current.num_elements = arr_dim
+            current._num_elements = arr_dim
             if i < len(subranges)-1:
-                current.element_type = ArrayType(None, num_elements=1)
+                current._element_type = ArrayType(None, num_elements=1)
                 current = current.element_type      # point to next layer down
 
         # overwrite final layer with actual contained type
-        current.element_type = die_to_dtype(self.type_die, typedef_name, typename_basic)
+        current._element_type = die_to_dtype(self.type_die, typedef_name, typename_basic)
 
         # return top-level type
         return arrtype
@@ -300,12 +307,9 @@ def die_to_dtype(self:DIE, typedef_name:str='', typename_basic:bool=False) -> Da
         name = get_typename(self, typedef_name)
         return UnionTypeBasic(self.name) if typename_basic else unionDIE_to_varlib(self, name)
     elif self.tag == 'DW_TAG_subroutine_type':
-        fproto = FunctionType(None, [], typedef_name)
-        if not typename_basic:
-            # only grab the signature if we're doing the full definition
-            fproto.return_dtype = die_to_dtype(self.type_die) if self.type_die else BuiltinType.create_void_type()
-            fproto.params = [die_to_dtype(p.type_die) for p in self.iter_children() if p.tag == 'DW_TAG_formal_parameter']
-        return fproto
+        return_type = None if typename_basic else die_to_dtype(self.type_die) if self.type_die else BuiltinType.create_void_type()
+        params = [] if typename_basic else [die_to_dtype(p.type_die) for p in self.iter_children() if p.tag == 'DW_TAG_formal_parameter']
+        return FunctionType(return_type, params, typedef_name)
     elif self.tag == 'DW_TAG_enumeration_type':
         name = get_typename(self)
         return EnumType(name)
@@ -314,9 +318,8 @@ def die_to_dtype(self:DIE, typedef_name:str='', typename_basic:bool=False) -> Da
     if self.tag == 'DW_TAG_reference_type' or \
        self.tag == 'DW_TAG_rvalue_reference_type':
         # HACK: treat reference types as pointers for now
-        ptype = PointerType(None, self.byte_size)
-        ptype.pointed_to = die_to_dtype(self.type_die, typedef_name, typename_basic) if self.type_die is not None else BuiltinType.create_void_type()
-        return ptype
+        pointed_to = die_to_dtype(self.type_die, typedef_name, typename_basic) if self.type_die is not None else BuiltinType.create_void_type()
+        return PointerType(pointed_to, self.byte_size)
     elif self.tag == 'DW_TAG_ptr_to_member_type':
         # HACK: treat ptr_to_member (C++-ism) as void*
         return PointerType(BuiltinType.create_void_type(), self.byte_size)
