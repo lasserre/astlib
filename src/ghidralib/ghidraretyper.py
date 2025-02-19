@@ -35,7 +35,6 @@ from ghidra.util.task import ConsoleTaskMonitor
 # Caleb's stuff (astlib)
 from varlib import datatype, StructDatabase
 from varlib.datatype import StructDefinition
-from .datatypes import to_varlib_dtype, _struct_to_varlib
 from .export_types import update_ghidra_struct_in_sdb
 
 # Normal python stuff
@@ -52,7 +51,7 @@ ghidra_data_type_by_caleb_data_type = {
     'ushort'        :   '/ushort',
     'uint32'        :   '/uint',
     'uint64'        :   '/ulonglong',
-    # 'uint128'     :   '?',
+    'uint128'       :   '/uint16',
     # 'uint256'     :   '?',
     # 'uint512'     :   '?',
     'char'          :   '/char',

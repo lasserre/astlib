@@ -12,22 +12,22 @@ from varlib.datatype import StructType, UnionType, StructDefinition, UnionDefini
 from wildebeest.utils import show_progress
 from .datatypes import to_varlib_dtype
 
-def get_field(dt_comp:ghidra.program.model.data.DataTypeComponent):
-    return StructField(to_varlib_dtype(dt_comp.getDataType(), dt_comp.getLength()), dt_comp.getFieldName())
+def get_field(sdb:StructDatabase, dt_comp:ghidra.program.model.data.DataTypeComponent):
+    return StructField(to_varlib_dtype(sdb, dt_comp.getDataType(), dt_comp.getLength()), dt_comp.getFieldName())
 
-def get_struct_layout(stype:ghidra.program.model.data.Structure) -> StructLayout:
-    return StructLayout({x.getOffset(): get_field(x) for x in stype.getDefinedComponents()})
+def get_struct_layout(stype:ghidra.program.model.data.Structure, sdb:StructDatabase) -> StructLayout:
+    return StructLayout({x.getOffset(): get_field(sdb, x) for x in stype.getDefinedComponents()})
 
-def get_struct_definition(stype:ghidra.program.model.data.Structure) -> StructDefinition:
+def get_struct_definition(stype:ghidra.program.model.data.Structure, sdb:StructDatabase) -> StructDefinition:
     ghidra_uid = stype.universalID.value    # save this since sids are DIFFERENT
-    return StructDefinition(stype.name, get_struct_layout(stype), ghidra_uid=ghidra_uid)
+    return StructDefinition(stype.name, get_struct_layout(stype, sdb), ghidra_uid=ghidra_uid)
 
-def get_union_layout(utype:ghidra.program.model.data.Union) -> UnionLayout:
-    return UnionLayout([get_field(x) for x in utype.getComponents()])
+def get_union_layout(utype:ghidra.program.model.data.Union, sdb:StructDatabase) -> UnionLayout:
+    return UnionLayout([get_field(sdb, x) for x in utype.getComponents()])
 
-def get_union_definition(utype:ghidra.program.model.data.Union) -> UnionDefinition:
+def get_union_definition(utype:ghidra.program.model.data.Union, sdb:StructDatabase) -> UnionDefinition:
     ghidra_uid = utype.universalID.value    # save this since sids are DIFFERENT
-    return UnionDefinition(utype.name, get_union_layout(utype), ghidra_uid=ghidra_uid)
+    return UnionDefinition(utype.name, get_union_layout(utype, sdb), ghidra_uid=ghidra_uid)
 
 def update_ghidra_struct_in_sdb(dtmgr:DataTypeManager, struct_name:str, sdb:StructDatabase) -> int:
     '''
@@ -38,8 +38,8 @@ def update_ghidra_struct_in_sdb(dtmgr:DataTypeManager, struct_name:str, sdb:Stru
     if not matches:
         return None
     gdt = matches[0]
-    dtype = to_varlib_dtype(gdt, gdt.length)
-    sdb.map_struct_type('', get_struct_definition(gdt), is_union=False, force_sid=dtype.sid)
+    dtype = to_varlib_dtype(sdb, gdt, gdt.length)
+    sdb.map_struct_type('', get_struct_definition(gdt, sdb), is_union=False, force_sid=dtype.sid)
     sdb.build_sids_by_name()
     return dtype.sid
 
@@ -52,11 +52,11 @@ def export_ghidra_types_to_sdb(dtmgr:DataTypeManager, progress_bar:bool=True) ->
         all_composites = tqdm(all_composites, desc='Exporting structs/unions')
 
     for ghidra_type in all_composites:
-        dtype = to_varlib_dtype(ghidra_type, ghidra_type.getLength())
+        dtype = to_varlib_dtype(sdb, ghidra_type, ghidra_type.getLength())
         if isinstance(dtype, StructType):
-            sdb.structs_by_id[dtype.sid] = get_struct_definition(ghidra_type)
+            sdb.structs_by_id[dtype.sid] = get_struct_definition(ghidra_type, sdb)
         elif isinstance(dtype, UnionType):
-            sdb.unions_by_id[dtype.sid] = get_union_definition(ghidra_type)
+            sdb.unions_by_id[dtype.sid] = get_union_definition(ghidra_type, sdb)
         else:
             raise Exception(f'Unhandled datatype {type(dtype)}: {dtype}')
 
