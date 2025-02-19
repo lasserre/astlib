@@ -68,6 +68,8 @@ class StructType(DataType):
 
     @property
     def size(self):
+        if not self.layout:
+            return 1    # minimum size of 1
         last_member_off = max(self.layout.keys())
         return last_member_off + self.layout[last_member_off].size
 
