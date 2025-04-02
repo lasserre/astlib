@@ -1,2 +1,2 @@
 # astlib
-Python code for AST logic, also including typelib and dwarflib
+Python code defining AST. Also includes varlib, ghidralib, and dwarflib
