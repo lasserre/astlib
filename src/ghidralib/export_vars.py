@@ -111,6 +111,10 @@ def build_accessed_sdb(pdecomp:ProgramDecompilation) -> StructDatabase:
         )
         accessed_sdb.map_struct_type('', access_sdef, is_union=False, force_sid=sid)
 
+    # map ALL union types so any structs referring to a union don't break our postprocessing later
+    for uid, udef in pdecomp.sdb.unions_by_id.items():
+        accessed_sdb.map_struct_type('', udef, is_union=True, force_sid=uid)
+
     return accessed_sdb
 
 def export_program(proj:GhidraProject, bin_file:DomainFile,

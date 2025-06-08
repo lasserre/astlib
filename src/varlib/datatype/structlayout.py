@@ -134,7 +134,7 @@ class UnionLayout:
     @staticmethod
     def from_dict(d:dict, sdb) -> 'UnionLayout':
         return UnionLayout([
-            [StructField.from_dict(fdict, sdb) for fdict in d['fields']]
+            StructField.from_dict(fdict, sdb) for fdict in d['fields']
         ])
 
 class StructDefinition:
