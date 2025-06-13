@@ -820,6 +820,17 @@ class TranslationUnitDecl(ASTNode):
                                 # (usually indicating unimplemented code which should be
                                 # treated like an error)
 
+    @property
+    def global_vars(self) -> List[VarDecl]:
+        '''
+        Returns a list of the global variable VarDecls referenced within this translation unit
+        '''
+        # NOTE - our implementation which exports the AST always places global variable decls
+        # first, followed by FunctionDecls (the final one is the function body)
+        # --> if this implementation ever changes, this function will need to change
+        # return [x for x in self.inner if x.
+        return list(takewhile(lambda x: x.kind == 'VarDecl', self.inner))
+
     def to_dict(self) -> dict:
         return {
             **super().to_dict(),
