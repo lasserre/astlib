@@ -54,6 +54,13 @@ class DecompiledFunction:
         '''
         return dict(self.results.highFunction.localSymbolMap.nameToSymbolMap)
 
+    @property
+    def address(self) -> int:
+        '''
+        Returns the function address
+        '''
+        return self.ast.fdecl.address
+
 class ProgramDecompilation:
     '''
     Container for a set of decompiled functions and the corresponding
