@@ -29,6 +29,7 @@ from ghidra.program.model.pcode import HighFunctionDBUtil
 from ghidra.program.model.pcode import HighSymbol
 
 from ghidra.program.model.symbol import SourceType
+from ghidra.program.model.address import Address
 
 from ghidra.util.task import ConsoleTaskMonitor
 
@@ -75,7 +76,12 @@ class GhidraRetyper:
     @property
     def dtype_mgr(self) -> ProgramBasedDataTypeManager:
         '''Returns a handle to the data type manager'''
-        return self.program.getDataTypeManager()
+        return self.program.dataTypeManager
+
+    @property
+    def func_mgr(self) -> FunctionManager:
+        '''Returns a handle to the function manager'''
+        return self.program.functionManager
 
     def is_conflict(self, sid, comps):
         # Identify explicit conflict definitions
@@ -239,8 +245,27 @@ class GhidraRetyper:
     #     print(f'DYLAN TODO: set decompiler parameter {param_name} in {func_addr:#x} to type {dtype}')
 
     def set_return_type(self, func_addr:int, dtype:datatype.DataType):
-        raise Exception('TODO - implement set_return_type')
+        '''
+        Sets the function return type
 
+        NOTE: this requires a transaction to be active, e.g:
+
+        tx_id = program.startTransaction('Set return types')
+        // set return type(s)
+        program.endTransaction(tx_id, True)
+        '''
+        ghidra_dtype = self.convert_dtype(dtype)
+        if not ghidra_dtype:
+            raise Exception(f'Error: unable to convert data type {dtype} to Ghidra data type')
+
+        func = self.get_function(func_addr)
+        func.setReturnType(ghidra_dtype, SourceType.USER_DEFINED)
+
+    def get_function(self, offset:int) -> Function:
+        return self.func_mgr.getFunctionAt(self.get_address_from_offset(offset))
+
+    def get_address_from_offset(self, offset:int) -> Address:
+        return self.program.addressFactory.getAddress(f'0x{offset:x}')
 
     # TODO: move all the type conversion to varlib or wherever I'm already
     # converting from DataType -> Ghidra type
