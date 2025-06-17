@@ -68,10 +68,12 @@ def export_vars(decompiler:AstDecompiler, func_list:List[Function], bid:int=-1, 
         ).reset_index(drop=True)
 
 class ProgramExport:
-    def __init__(self, vars_df:pd.DataFrame, sdb:StructDatabase, accessed_sdb:StructDatabase=None):
+    def __init__(self, vars_df:pd.DataFrame, sdb:StructDatabase, accessed_sdb:StructDatabase=None,
+                func_local_accessed_sdbs:Dict[int,StructDatabase]=None):
         self.vars_df = vars_df
         self.sdb = sdb
         self.accessed_sdb = accessed_sdb
+        self.func_local_accessed_sdbs = func_local_accessed_sdbs
 
 class CollectStructMemberRefs(VisitAllChildrenByDefaultVisitor):
     def __init__(self):
@@ -117,6 +119,47 @@ def build_accessed_sdb(pdecomp:ProgramDecompilation) -> StructDatabase:
 
     return accessed_sdb
 
+def build_function_local_accessed_sdbs(pdecomp:ProgramDecompilation) -> Dict[int,StructDatabase]:
+    '''
+    Build a separate sdb for each function, where the structure definitions include only the members
+    accessed within that function.
+    '''
+    accessed_offsets_by_func_sid:Dict[Tuple[int,int],Set[int]] = {}     # map (func_addr,sid) -> set(offsets)
+
+    # gather all member references across entire program
+    refs_by_func = {fd.address: CollectStructMemberRefs().visit(fd.ast) for fd in pdecomp.decompiled_functions}
+
+    for func_addr, member_refs in refs_by_func.items():
+        for mref in member_refs:
+            mref:MemberExpr
+            if mref.parent_struct:
+                sid = mref.parent_struct.sid
+                skey = (func_addr, sid)
+                if skey not in accessed_offsets_by_func_sid:
+                    accessed_offsets_by_func_sid[skey] = set()
+                accessed_offsets_by_func_sid[skey].add(mref.offset)
+
+    accessed_sdbs = {}  # map func_addr -> sdb
+
+    for skey, offsets in accessed_offsets_by_func_sid.items():
+        func_addr, sid = skey
+        full_sdef = pdecomp.sdb.structs_by_id[sid]
+        access_sdef = StructDefinition(
+            f'{full_sdef.name}__{func_addr:#x}',
+            {off: full_sdef.layout[off] for off in offsets if off in full_sdef.layout},
+            ghidra_uid=full_sdef.ghidra_uid
+        )
+        if func_addr not in accessed_sdbs:
+            accessed_sdbs[func_addr] = StructDatabase()
+        accessed_sdbs[func_addr].map_struct_type('', access_sdef, is_union=False, force_sid=sid)
+
+    # map ALL union types so any structs referring to a union don't break our postprocessing later
+    for fsdb in accessed_sdbs.values():
+        for uid, udef in pdecomp.sdb.unions_by_id.items():
+            fsdb.map_struct_type('', udef, is_union=True, force_sid=uid)
+
+    return accessed_sdbs
+
 def export_program(proj:GhidraProject, bin_file:DomainFile,
                     limit_funcs:int=None,
                     skip_unique_vars:bool=False, status_msg:str='Exporting program data',
@@ -129,8 +172,9 @@ def export_program(proj:GhidraProject, bin_file:DomainFile,
             export_func_vars(fd, bid, skip_unique_vars) for fd in pdecomp.decompiled_functions
         ]).reset_index(drop=True)
         accessed_sdb = build_accessed_sdb(pdecomp)
+        func_local_sdbs = build_function_local_accessed_sdbs(pdecomp)
 
-    return ProgramExport(vars_df, pdecomp.sdb, accessed_sdb)
+    return ProgramExport(vars_df, pdecomp.sdb, accessed_sdb, func_local_sdbs)
 
 def export_program_vars(proj:GhidraProject, bin_files:List[DomainFile], limit_funcs:int=None,
                         skip_unique_vars:bool=False) -> pd.DataFrame:
