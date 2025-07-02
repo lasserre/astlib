@@ -666,11 +666,16 @@ class FunctionType(DataType):
 
     def __str__(self):
         # assumes function pointer, but PointerType parent will add the appropriate # of '*' characters
-        return_type_str = '' if self.return_dtype is None else f'{self.return_dtype} '
-        return f'{return_type_str}({self.name})({",".join(str(p) for p in self.params)})'
+        return self.code_string()
 
     def __repr__(self) -> str:
         return str(self)
+
+    def code_string(self, varname:str=None, pointer_levels:int=0) -> str:
+        name = varname if varname is not None else self.name
+        ptr_str = '*'*pointer_levels
+        return_type_str = '' if self.return_dtype is None else f'{self.return_dtype} '
+        return f'{return_type_str}({ptr_str}{name})({",".join(str(p) for p in self.params)})'
 
     @staticmethod
     def func_dtypes_equal(dt1:DataType, dt2:DataType):

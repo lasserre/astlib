@@ -478,7 +478,7 @@ class PrintASTVisitor(ASTVisitor):
             code += self._start_line()
 
         if isinstance(vdecl.dtype, PointerType) and isinstance(vdecl.dtype.pointed_to, FunctionType):
-            code += f'{vdecl.dtype.pointed_to.str_with_varname(vdecl.name)}{line_end}'
+            code += f'{vdecl.dtype.pointed_to.code_string(vdecl.name, pointer_levels=1)}{line_end}'
         else:
             nelem = self._num_vdecl_arr_elements
             arr_size = f'[{nelem}]' if nelem is not None else ''
