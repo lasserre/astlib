@@ -73,6 +73,17 @@ def locate_binaries_from_project(proj:GhidraProject, binary_list:List[str],
 
     binary_list: The list of specific binary names to locate (without binary id prefix or .debug suffix)
     '''
+    if strip_only:
+        # leave as-is -- inputs are supplied in stripped name form
+        pass
+    elif debug_only:
+        # use .debug forms instead
+        binary_list = [f'{x}.debug' for x in binary_list]
+    else:
+        # we want one of each
+        orig_list = binary_list.copy()
+        binary_list = [*[f'{x}.debug' for x in orig_list], *orig_list]
+
     repo_file_paths = {}  # map de-numbered name -> DomainFile paths
     for f in get_all_files_in_project(proj, debug_only=debug_only, strip_only=strip_only):
         # remove initial binary number (e.g. 4.binary_name -> binary_name)
