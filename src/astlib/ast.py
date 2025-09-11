@@ -567,7 +567,8 @@ class MemberExpr(ASTNode):
             return None
         elif self.parent_union:
             # have to match union field by name
-            return [f for f in self.parent_union.layout.fields if f.name == self.name][0].dtype
+            matching_fields = [f for f in self.parent_union.layout.fields if f.name == self.name]
+            return matching_fields[0].dtype if matching_fields else None
         return None
 
     @dtype.setter

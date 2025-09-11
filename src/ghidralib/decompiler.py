@@ -9,6 +9,8 @@ from typing import List, Dict, Tuple
 import pandas as pd
 from rich.console import Console
 from tqdm import tqdm
+from pathlib import Path
+import json
 
 import ghidra
 from ghidra.app.decompiler import DecompInterface, DecompileOptions, DecompileResults
@@ -19,7 +21,7 @@ from ghidra.program.model.pcode import HighSymbol, HighFunctionDBUtil
 from ghidra.program.model.address import Address
 from ghidra.program.model.symbol import SourceType
 
-from astlib import TranslationUnitDecl, read_json_str, build_var_ast_signature, VarDecl, JsonRecursionError
+from astlib import TranslationUnitDecl, read_json_str, build_var_ast_signature, VarDecl, JsonRecursionError, astnode_from_dict
 from varlib import StructDatabase
 from .export_types import export_ghidra_types_to_sdb
 
@@ -61,6 +63,17 @@ class DecompiledFunction:
         '''
         return self.ast.fdecl.address
 
+    def to_dict(self) -> dict:
+        return {
+            'ast': self.ast.to_dict(),
+            'error_msg': self.error_msg,
+            # don't save results or ast_json str
+        }
+
+    @staticmethod
+    def from_dict(d:dict, sdb:StructDatabase) -> 'DecompiledFunction':
+        return DecompiledFunction(astnode_from_dict(d['ast'], sdb), d['error_msg'], results=None)
+
 class ProgramDecompilation:
     '''
     Container for a set of decompiled functions and the corresponding
@@ -83,6 +96,27 @@ class ProgramDecompilation:
         if self.failed_decompilations:
             self.console.print(f'[yellow]{len(self.failed_decompilations):,} functions failed to decompile')
             self.decompiled_functions = [fd for fd in self.decompiled_functions if fd.ast]      # filter down to only good ones
+
+    @staticmethod
+    def from_json(filepath:Path) -> 'ProgramDecompilation':
+        with open(filepath, 'r') as f:
+            data = json.load(f)
+        return ProgramDecompilation.from_dict(data)
+
+    @staticmethod
+    def from_dict(d:dict) -> 'ProgramDecompilation':
+        sdb = StructDatabase.from_dict(d['sdb'])
+        return ProgramDecompilation([DecompiledFunction.from_dict(x, sdb) for x in d['decompiled_functions']], sdb)
+
+    def to_dict(self) -> dict:
+        return {
+            'decompiled_functions': [x.to_dict() for x in self.decompiled_functions],
+            'sdb': self.sdb.to_dict(),
+        }
+
+    def to_json(self, filepath:Path):
+        with open(filepath, 'w') as f:
+            json.dump(self.to_dict(), f, indent=2)
 
 class AstDecompiler:
     AST_DELIM = '#$#$# BEGIN AST #@#@#'
