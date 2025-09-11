@@ -16,7 +16,7 @@ import uuid
 import shutil
 from typing import List
 
-from .decompiler import AstDecompiler
+from .decompiler import AstDecompiler, ProgramDecompilation
 
 def get_project_manager_headless() -> ghidra.framework.project.DefaultProjectManager:
     '''
@@ -279,3 +279,12 @@ class GhidraCheckoutProgram:
                 self.domain_file.undoCheckout(False)
         else:
             self.domain_file.undoCheckout(False)
+
+def export_asts(server:str, repo_name:str, binary_name:str, debug:bool=True, verify_rev:int=-1, rollback_delete:bool=False, no_status:bool=False) -> ProgramDecompilation:
+    with OpenSharedGhidraProject(server, repo_name) as proj:
+        bin_file = locate_binaries_from_project(proj, [binary_name], debug_only=debug, strip_only=(not debug))[0]
+        if verify_rev > -1:
+            verify_ghidra_revision(bin_file, verify_rev, rollback_delete, terminate_checkouts=True)
+        with GhidraCheckoutProgram(proj, bin_file, read_only=True) as co:
+            status = None if no_status else f'Decompiling {"debug" if debug else ""} binary {binary_name}'
+            return co.decompiler.export_program_decompilation(status, co.decompiler.nonthunk_functions)

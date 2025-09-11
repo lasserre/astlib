@@ -19,6 +19,7 @@ from ghidra.program.model.pcode import HighSymbol
 from .projects import *
 from .decompiler import AstDecompiler, DecompiledFunction, ProgramDecompilation
 from astlib.find_all_references import *
+from astlib import CollectAllMemberExprs
 from varlib.datatype import StructField
 
 def export_func_vars(fdecomp:DecompiledFunction, bid:int=-1, skip_unique_vars:bool=False) -> pd.DataFrame:
@@ -75,23 +76,11 @@ class ProgramExport:
         self.accessed_sdb = accessed_sdb
         self.func_local_accessed_sdbs = func_local_accessed_sdbs
 
-class CollectStructMemberRefs(VisitAllChildrenByDefaultVisitor):
-    def __init__(self):
-        '''
-        ast: The AST to search for MemberExpr nodes
-        '''
-        super().__init__()
-        # self.member_exprs:List[MemberExpr] = []
-
-    def visit_MemberExpr(self, memexpr:MemberExpr):
-        # self.member_exprs.append(memexpr)
-        return memexpr
-
 def build_accessed_sdb(pdecomp:ProgramDecompilation) -> StructDatabase:
     accessed_offsets_by_sid:Dict[int,Set[int]] = {}     # map sid -> set(offsets)
 
     # gather all member references across entire program
-    member_refs = [x for fd in pdecomp.decompiled_functions for x in CollectStructMemberRefs().visit(fd.ast)]
+    member_refs = [x for fd in pdecomp.decompiled_functions for x in CollectAllMemberExprs().visit(fd.ast)]
 
     for mref in member_refs:
         if mref.parent_struct:
@@ -127,7 +116,7 @@ def build_function_local_accessed_sdbs(pdecomp:ProgramDecompilation) -> Dict[int
     accessed_offsets_by_func_sid:Dict[Tuple[int,int],Set[int]] = {}     # map (func_addr,sid) -> set(offsets)
 
     # gather all member references across entire program
-    refs_by_func = {fd.address: CollectStructMemberRefs().visit(fd.ast) for fd in pdecomp.decompiled_functions}
+    refs_by_func = {fd.address: CollectAllMemberExprs().visit(fd.ast) for fd in pdecomp.decompiled_functions}
 
     for func_addr, member_refs in refs_by_func.items():
         for mref in member_refs:

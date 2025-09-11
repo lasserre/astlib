@@ -139,7 +139,7 @@ class AstDecompiler:
         '''
         return export_ghidra_types_to_sdb(self.datatype_mgr, progress_bar)
 
-    def export_program_decompilation(self, status_msg:str, funclist:List[Function]=None, sdb:StructDatabase=None) -> ProgramDecompilation:
+    def export_program_decompilation(self, status_msg:str='Decompiling program', funclist:List[Function]=None, sdb:StructDatabase=None) -> ProgramDecompilation:
         '''
         Export all non-thunk functions in the program (or the functions from funclist if specified)
         as well as the StructureDatabase for the program, and return the result as a
@@ -151,7 +151,8 @@ class AstDecompiler:
         '''
         funclist = funclist if funclist else self.nonthunk_functions
         sdb = self.export_program_struct_db() if sdb is None else sdb
-        return ProgramDecompilation([self.decompile(f, sdb) for f in tqdm(funclist, desc=status_msg)], sdb)
+        get_funcs = tqdm(funclist, desc=status_msg) if status_msg else funclist
+        return ProgramDecompilation([self.decompile(f, sdb) for f in get_funcs], sdb)
 
     @staticmethod
     def extract_ast_json_from_decomp_results(res:DecompileResults) -> Tuple[str, str]:

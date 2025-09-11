@@ -273,3 +273,40 @@ class GetNodesAtAddr(ASTVisitor):
             self.visit(child)
 
         return self.node_matches
+
+class CollectAllMemberExprs(VisitAllChildrenByDefaultVisitor):
+    def __init__(self):
+        '''
+        Collects all structure member references in the AST in the form
+        of MemberExpr nodes.
+        '''
+        super().__init__()
+
+    def visit_MemberExpr(self, memexpr:'MemberExpr'):
+        return memexpr
+
+class CollectStructMemberRefs(VisitAllChildrenByDefaultVisitor):
+    def __init__(self, member_offset:int=-1, parent_sid:int=-1):
+        '''
+        Collects all structure member references in the AST in the form
+        of MemberExpr nodes.
+
+        If member_offset is specified, only members with this offset are returned
+        If parent_sid is specified, only members with this parent_sid are returned
+
+        These conditions can be combined to find only references to a single
+        member in a specific structure
+        '''
+        super().__init__()
+        self.member_offset = member_offset
+        self.parent_sid = parent_sid
+        # self.member_exprs:List[MemberExpr] = []
+
+    def visit_MemberExpr(self, memexpr:'MemberExpr'):
+        if self.member_offset > -1:
+            if memexpr.offset != self.member_offset:
+                return  # offset does not match
+        if self.parent_sid > -1:
+            if memexpr.sid != self.parent_sid:
+                return  # parent sid does not match
+        return memexpr
