@@ -83,7 +83,6 @@ class ProgramDecompilation:
         self.decompiled_functions = decompiled_funcs
         self.failed_decompilations = []
         self.sdb = sdb
-        self.console = Console()
 
         self._filter_failed_decomps()
 
@@ -94,7 +93,8 @@ class ProgramDecompilation:
         '''
         self.failed_decompilations = [fd for fd in self.decompiled_functions if not fd.ast]
         if self.failed_decompilations:
-            self.console.print(f'[yellow]{len(self.failed_decompilations):,} functions failed to decompile')
+            console = Console()
+            console.print(f'[yellow]{len(self.failed_decompilations):,} functions failed to decompile')
             self.decompiled_functions = [fd for fd in self.decompiled_functions if fd.ast]      # filter down to only good ones
 
     @staticmethod
