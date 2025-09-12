@@ -116,8 +116,8 @@ class ProgramDecompilation:
         '''
         ast_dump_folder = bin_folder/'ast_dumps'
         ast_dump_folder /= 'debug' if debug else 'stripped'
-        sdb_file = list(bin_folder.glob('*.debug.sdb'))[0] if debug else bin_folder/f'{bin_folder.name}.sdb'
-        sdb = StructDatabase.from_json(sdb_file)
+        sdb_file = bin_folder/f'{bin_folder.name}.debug.sdb' if debug else bin_folder/f'{bin_folder.name}.sdb'
+        sdb = StructDatabase.from_json(sdb_file) if sdb_file.exists() else None
 
         ast_file_list = list(ast_dump_folder.glob('*.json'))
         get_ast_files = tqdm(ast_file_list, desc=f'Reading decompiled functions from {bin_folder.name}') if show_pbar else ast_file_list
