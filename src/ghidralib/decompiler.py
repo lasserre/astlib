@@ -21,7 +21,7 @@ from ghidra.program.model.pcode import HighSymbol, HighFunctionDBUtil
 from ghidra.program.model.address import Address
 from ghidra.program.model.symbol import SourceType
 
-from astlib import TranslationUnitDecl, read_json_str, build_var_ast_signature, VarDecl, JsonRecursionError, astnode_from_dict
+from astlib import TranslationUnitDecl, read_json_str, build_var_ast_signature, VarDecl, JsonRecursionError, astnode_from_dict, read_json
 from varlib import StructDatabase
 from .export_types import export_ghidra_types_to_sdb
 
@@ -107,6 +107,24 @@ class ProgramDecompilation:
     def from_dict(d:dict) -> 'ProgramDecompilation':
         sdb = StructDatabase.from_dict(d['sdb'])
         return ProgramDecompilation([DecompiledFunction.from_dict(x, sdb) for x in d['decompiled_functions']], sdb)
+
+    @staticmethod
+    def from_bin_folder(bin_folder:Path, debug:bool, show_pbar:bool=True) -> 'ProgramDecompilation':
+        '''
+        bin_folder: Binary folder within a wdb run folder (e.g. run1/0.my_binary)
+        debug: Collects ProgramDecompilation for debug binary if true, otherwise collects stripped binary
+        '''
+        ast_dump_folder = bin_folder/'ast_dumps'
+        ast_dump_folder /= 'debug' if debug else 'stripped'
+        sdb_file = list(bin_folder.glob('*.debug.sdb'))[0] if debug else bin_folder/f'{bin_folder.name}.sdb'
+        sdb = StructDatabase.from_json(sdb_file)
+
+        ast_file_list = list(ast_dump_folder.glob('*.json'))
+        get_ast_files = tqdm(ast_file_list, desc=f'Reading decompiled functions from {bin_folder.name}') if show_pbar else ast_file_list
+        ast_list = [read_json(f, sdb) for f in get_ast_files]
+        return ProgramDecompilation([
+                DecompiledFunction(ast, error_msg='', results=None) for ast in ast_list
+            ], sdb)
 
     def to_dict(self) -> dict:
         return {
