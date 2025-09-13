@@ -887,6 +887,12 @@ def read_json(json_file:Path, sdb:StructDatabase=None) -> ASTNode:
 
     return read_json_str(json_str, sdb)
 
+def read_json_nothrow(json_file:Path, sdb:StructDatabase=None) -> ASTNode:
+    try:
+        return read_json(json_file, sdb)
+    except JsonRecursionError:
+        return None
+
 class JsonRecursionError(Exception):
     # Error for case when json.loads() is unable to read in a JSON file
     # due to massive depth (I've seen this be legitimate)
