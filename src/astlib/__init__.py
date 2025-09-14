@@ -3,6 +3,7 @@ from .astvisitor import *
 from .ghidra_scripts import *
 from . import color_ast
 from .find_all_references import *
+from .export import export_func_vars
 
 from pathlib import Path
 

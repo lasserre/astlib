@@ -19,39 +19,9 @@ from ghidra.program.model.pcode import HighSymbol
 from .projects import *
 from .decompiler import AstDecompiler, DecompiledFunction, ProgramDecompilation
 from astlib.find_all_references import *
-from astlib import CollectAllMemberExprs
+from astlib import CollectAllMemberExprs, export_func_vars
 from varlib.datatype import StructField
 
-def export_func_vars(fdecomp:DecompiledFunction, bid:int=-1, skip_unique_vars:bool=False) -> pd.DataFrame:
-    '''
-    Exports a table describing the AST variables and their data types for the
-    locals and parameters of the given function.
-    '''
-    columns = [
-        'BinaryId','FunctionStart','Signature','Vartype','Name','Location','Type','TypeJson',
-    ]
-
-    tudecl = fdecomp.ast
-
-    if not tudecl:
-        # failed to decompile - return empty dataframe
-        return pd.DataFrame.from_records([], columns=columns)
-
-    fdecl = tudecl.fdecl
-    func_vars = fdecl.params + fdecl.local_vars
-
-    if skip_unique_vars:
-        func_vars = remove_unique_vars(func_vars)
-
-    # find all refs & compute signatures
-    var_refs = [FindAllVarRefs(v.name).visit(fdecl.func_body) for v in func_vars]
-    var_sigs = [compute_var_ast_signature(refs, fdecl.address) for refs in var_refs]
-    varids = [build_varid(bid, fdecl.address, var_sigs[i], get_vartype(func_vars[i])) for i in range(len(func_vars))]
-
-    # save data in table form and return
-    rows = [[*varids[i], v.name, v.location, v.dtype, v.dtype.to_json()] for i, v in enumerate(func_vars)]
-
-    return pd.DataFrame.from_records(rows, columns=columns)
 
 def export_vars(decompiler:AstDecompiler, func_list:List[Function], bid:int=-1, skip_unique_vars:bool=False,
                 status_msg:str='') -> pd.DataFrame:
@@ -60,7 +30,7 @@ def export_vars(decompiler:AstDecompiler, func_list:List[Function], bid:int=-1, 
     specified function list
     '''
     return pd.concat(
-            [export_func_vars(decompiler.decompile(f), bid, skip_unique_vars)
+            [export_func_vars(decompiler.decompile(f).ast, bid, skip_unique_vars)
                 for f in tqdm(
                     func_list,
                     desc=status_msg if status_msg else decompiler.program.name
@@ -158,7 +128,7 @@ def export_program(proj:GhidraProject, bin_file:DomainFile,
         nonthunks = co.decompiler.nonthunk_functions[:limit_funcs]
         pdecomp = co.decompiler.export_program_decompilation(status_msg, nonthunks)
         vars_df = pd.concat([
-            export_func_vars(fd, bid, skip_unique_vars) for fd in pdecomp.decompiled_functions
+            export_func_vars(fd.ast, bid, skip_unique_vars) for fd in pdecomp.decompiled_functions
         ]).reset_index(drop=True)
         accessed_sdb = build_accessed_sdb(pdecomp, exclude_globals=True)
         func_local_sdbs = build_function_local_accessed_sdbs(pdecomp)
