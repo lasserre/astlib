@@ -1,7 +1,7 @@
 from .astviewer import *
 
 from typing import List
-from .ast import ASTNode, FunctionDecl, DeclRefExpr, ValueDecl
+from .ast import *
 
 class FindAllVarRefs(VisitAllChildrenByDefaultVisitor):
     def __init__(self, varname:str) -> None:
@@ -118,3 +118,59 @@ def build_var_ast_signature(fdecl:FunctionDecl, varname:str) -> str:
     '''
     var_refs = FindAllVarRefs(varname).visit(fdecl.func_body)
     return compute_var_ast_signature(var_refs, fdecl.address)
+
+def find_root_vdecl(mexpr:MemberExpr) -> ValueDecl:
+    if isinstance(mexpr.inner[0], MemberExpr):
+        return find_root_vdecl(mexpr.inner[0])
+    elif isinstance(mexpr.inner[0], DeclRefExpr):
+        decl_ref = mexpr.inner[0]
+        return decl_ref.referencedDecl
+    elif isinstance(mexpr.inner[0], ArraySubscriptExpr):
+        return find_root_vdecl(mexpr.inner[0])
+    elif isinstance(mexpr.inner[0], ParenExpr):
+        return find_root_vdecl(mexpr.inner[0])
+    elif isinstance(mexpr.inner[0], UnaryOperator):# and mexpr.inner[0].opcode == '*':
+        return find_root_vdecl(mexpr.inner[0])
+    else:
+        raise Exception(f'Unhandled MemberExpr.inner[0] type of {type(mexpr.inner[0])}')
+
+class CollectAllMemberExprs(VisitAllChildrenByDefaultVisitor):
+    def __init__(self, exclude_globals:bool=False):
+        '''
+        Collects all structure member references in the AST in the form
+        of MemberExpr nodes.
+        '''
+        super().__init__()
+        self.exclude_globals = exclude_globals
+
+    def visit_MemberExpr(self, memexpr:MemberExpr):
+        if self.exclude_globals:
+            vdecl = find_root_vdecl(memexpr)
+            return memexpr if vdecl.location.loc_type != 'ram' else None
+        return memexpr
+
+class CollectStructMemberRefs(VisitAllChildrenByDefaultVisitor):
+    def __init__(self, member_offset:int=-1, parent_sid:int=-1):
+        '''
+        Collects all structure member references in the AST in the form
+        of MemberExpr nodes.
+
+        If member_offset is specified, only members with this offset are returned
+        If parent_sid is specified, only members with this parent_sid are returned
+
+        These conditions can be combined to find only references to a single
+        member in a specific structure
+        '''
+        super().__init__()
+        self.member_offset = member_offset
+        self.parent_sid = parent_sid
+        # self.member_exprs:List[MemberExpr] = []
+
+    def visit_MemberExpr(self, memexpr:'MemberExpr'):
+        if self.member_offset > -1:
+            if memexpr.offset != self.member_offset:
+                return  # offset does not match
+        if self.parent_sid > -1:
+            if memexpr.sid != self.parent_sid:
+                return  # parent sid does not match
+        return memexpr

@@ -76,11 +76,11 @@ class ProgramExport:
         self.accessed_sdb = accessed_sdb
         self.func_local_accessed_sdbs = func_local_accessed_sdbs
 
-def build_accessed_sdb(pdecomp:ProgramDecompilation) -> StructDatabase:
+def build_accessed_sdb(pdecomp:ProgramDecompilation, exclude_globals:bool) -> StructDatabase:
     accessed_offsets_by_sid:Dict[int,Set[int]] = {}     # map sid -> set(offsets)
 
     # gather all member references across entire program
-    member_refs = [x for fd in pdecomp.decompiled_functions for x in CollectAllMemberExprs().visit(fd.ast)]
+    member_refs = [x for fd in pdecomp.decompiled_functions for x in CollectAllMemberExprs(exclude_globals).visit(fd.ast)]
 
     for mref in member_refs:
         if mref.parent_struct:
@@ -160,7 +160,7 @@ def export_program(proj:GhidraProject, bin_file:DomainFile,
         vars_df = pd.concat([
             export_func_vars(fd, bid, skip_unique_vars) for fd in pdecomp.decompiled_functions
         ]).reset_index(drop=True)
-        accessed_sdb = build_accessed_sdb(pdecomp)
+        accessed_sdb = build_accessed_sdb(pdecomp, exclude_globals=True)
         func_local_sdbs = build_function_local_accessed_sdbs(pdecomp)
 
     return ProgramExport(vars_df, pdecomp.sdb, accessed_sdb, func_local_sdbs)
