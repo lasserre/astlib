@@ -4,6 +4,12 @@
 from .ast import ASTNode
 from typing import List
 
+def highlight_node_kind(kind:str, font_color:str='red'):
+    def do_highlight(node, attrs):
+        if node.kind == kind:
+            attrs.font_color = font_color
+    return do_highlight
+
 def highlight_var_refs(varname:str, font_color:str='red'):
     '''
     Returns a format_node callback function that highlights all references
@@ -13,6 +19,12 @@ def highlight_var_refs(varname:str, font_color:str='red'):
         if node.kind == 'DeclRefExpr' and node.referencedDecl.name == varname:
             attrs.font_color = font_color
     return do_highlight
+
+def chain_formats(formats:List[callable]):
+    def do_chain(node, attrs):
+        for fmt in formats:
+            fmt(node, attrs)
+    return do_chain
 
 def _mark_khop_neighborhood(node:ASTNode, k:int):
     '''
