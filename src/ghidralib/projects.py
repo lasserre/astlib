@@ -66,6 +66,13 @@ def get_all_files_in_project(proj:GhidraProject, debug_only:bool=False, strip_on
 
     return all_files
 
+def get_all_binary_names_in_project(proj:GhidraProject) -> List[str]:
+    '''
+    Collect a list of all binary names in this project. Only one name is returned for every
+    stripped/debug pair, and is suitable for use in locate_binaries_from_project
+    '''
+    return [x.name[2:] for x in get_all_files_in_project(proj, debug_only=False, strip_only=True)]
+
 def locate_binaries_from_project(proj:GhidraProject, binary_list:List[str],
                                 debug_only:bool=False, strip_only:bool=False) -> List[DomainFile]:
     '''
