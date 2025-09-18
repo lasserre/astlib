@@ -39,11 +39,14 @@ def export_vars(decompiler:AstDecompiler, func_list:List[Function], bid:int=-1, 
         ).reset_index(drop=True)
 
 class ProgramExport:
-    def __init__(self, vars_df:pd.DataFrame, sdb:StructDatabase, accessed_sdb:StructDatabase=None,
-                func_local_accessed_sdbs:Dict[int,StructDatabase]=None):
+    def __init__(self, vars_df:pd.DataFrame, sdb:StructDatabase,
+                accessed_sdb:StructDatabase=None,
+                func_local_accessed_sdbs:Dict[int,StructDatabase]=None,
+                accessed_sdb_with_globals:StructDatabase=None):
         self.vars_df = vars_df
         self.sdb = sdb
         self.accessed_sdb = accessed_sdb
+        self.accessed_sdb_with_globals = accessed_sdb_with_globals      # include globals in this one to contrast
         self.func_local_accessed_sdbs = func_local_accessed_sdbs
 
 def build_accessed_sdb(pdecomp:ProgramDecompilation, exclude_globals:bool) -> StructDatabase:
@@ -131,9 +134,10 @@ def export_program(proj:GhidraProject, bin_file:DomainFile,
             export_func_vars(fd.ast, bid, skip_unique_vars) for fd in pdecomp.decompiled_functions
         ]).reset_index(drop=True)
         accessed_sdb = build_accessed_sdb(pdecomp, exclude_globals=True)
+        accessed_sdb_with_globals = build_accessed_sdb(pdecomp, exclude_globals=False)
         func_local_sdbs = build_function_local_accessed_sdbs(pdecomp)
 
-    return ProgramExport(vars_df, pdecomp.sdb, accessed_sdb, func_local_sdbs)
+    return ProgramExport(vars_df, pdecomp.sdb, accessed_sdb, func_local_sdbs, accessed_sdb_with_globals)
 
 def export_program_vars(proj:GhidraProject, bin_files:List[DomainFile], limit_funcs:int=None,
                         skip_unique_vars:bool=False) -> pd.DataFrame:

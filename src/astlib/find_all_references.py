@@ -131,8 +131,16 @@ def find_root_vdecl(mexpr:MemberExpr) -> ValueDecl:
         return find_root_vdecl(mexpr.inner[0])
     elif isinstance(mexpr.inner[0], UnaryOperator):# and mexpr.inner[0].opcode == '*':
         return find_root_vdecl(mexpr.inner[0])
+    elif isinstance(mexpr.inner[0], CStyleCastExpr):
+        return None     # we don't want to follow "non-variables" w/ a cast inside the member
+                        # expression like: ((Struct1*)(var + 4))->field3
     else:
-        raise Exception(f'Unhandled MemberExpr.inner[0] type of {type(mexpr.inner[0])}')
+        msg = f'Unhandled MemberExpr.inner[0] type of {type(mexpr.inner[0])}'
+        print(msg)
+        mexpr.print()
+        mexpr.parent.print()
+        mexpr.parent.parent.print()
+        raise Exception(msg)
 
 class CollectAllMemberExprs(VisitAllChildrenByDefaultVisitor):
     def __init__(self, exclude_globals:bool=False):
@@ -146,7 +154,7 @@ class CollectAllMemberExprs(VisitAllChildrenByDefaultVisitor):
     def visit_MemberExpr(self, memexpr:MemberExpr):
         if self.exclude_globals:
             vdecl = find_root_vdecl(memexpr)
-            return memexpr if vdecl.location.loc_type != 'ram' else None
+            return memexpr if vdecl and vdecl.location.loc_type != 'ram' else None
         return memexpr
 
 class CollectStructMemberRefs(VisitAllChildrenByDefaultVisitor):

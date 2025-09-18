@@ -1,5 +1,5 @@
 import pandas as pd
-from . import TranslationUnitDecl, FindAllVarRefs, compute_var_ast_signature, build_varid, get_vartype
+from . import TranslationUnitDecl, FindAllVarRefs, compute_var_ast_signature, build_varid, get_vartype, remove_unique_vars
 
 def export_func_vars(tudecl:TranslationUnitDecl, bid:int=-1, skip_unique_vars:bool=False) -> pd.DataFrame:
     '''
