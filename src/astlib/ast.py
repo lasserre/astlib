@@ -548,7 +548,17 @@ class MemberExpr(ASTNode):
         self._hide_dtype = False
 
     @property
+    def is_fake_member(self) -> bool:
+        '''
+        We detect fake members when they exist within a structure that does not define their offset in the layout
+        '''
+        return self.parent_struct and self.offset not in self.parent_struct.layout
+
+    @property
     def has_fake_ghidra_fieldname(self) -> bool:
+        # NOTE: noticed that this does not currently handle the other form (e.g. _4_4_)...don't remember
+        # the nuances of why I added this check initially so not touching it for now since it seems to be working
+        # --> I just added is_fake_member above which is how I plan to detect fake members in general
         return bool(re.match('field_0x([0-9a-f]+)', self.name))
 
     @property
@@ -830,7 +840,7 @@ class TranslationUnitDecl(ASTNode):
         # first, followed by FunctionDecls (the final one is the function body)
         # --> if this implementation ever changes, this function will need to change
         # return [x for x in self.inner if x.
-        return list(takewhile(lambda x: x.kind == 'VarDecl', self.inner))
+        return list(takewhile(lambda x: x.kind == 'VarDecl' and x.location.loc_type == 'ram', self.inner))
 
     def to_dict(self) -> dict:
         return {

@@ -235,11 +235,20 @@ class GhidraRetyper:
         # This function throws an exception when attempting to update type of unique variable with different size
         HighFunctionDBUtil.updateDBVariable(symbol, name, ghidra_dtype, SourceType.USER_DEFINED)
 
-    def set_globalvar_type(self, global_name:int, global_type:datatype.DataType):
-        # do this last: I don't have data for globals right now and we may not need them
-        # ...but, while you're doing the others if this is straightforward you can add
-        # support for globals too
-        raise Exception(f'TODO - implement set_globalvar_type')
+    def set_globalvar_type(self, global_name:str, global_type:datatype.DataType, new_name:str=None):
+        symbol_matches = self.program.symbolTable.getGlobalSymbols(global_name)
+        if not symbol_matches:
+            raise Exception(f'No matching global variables with name {global_name}')
+        elif len(symbol_matches) > 1:
+            print(f'Warning: found {len(symbol_matches):,} symbols with the name {global_name} - taking the first one only')
+
+        sym = symbol_matches[0]
+
+        # make room
+        self.program.listing.clearCodeUnits(sym.address, sym.address.add(global_type.size-1), False)
+        self.program.listing.createData(sym.address, self.convert_dtype(global_type))
+        if new_name is not None:
+            sym.setName(new_name, SourceType.USER_DEFINED)
 
     # def set_param_type(self, func_addr:int, param_name:str, dtype:datatype.DataType):
     #     print(f'DYLAN TODO: set decompiler parameter {param_name} in {func_addr:#x} to type {dtype}')
