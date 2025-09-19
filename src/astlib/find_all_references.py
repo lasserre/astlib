@@ -108,7 +108,7 @@ def compute_var_ast_signature(var_refs:List[ASTNode], func_addr:int) -> str:
     The signature will be a string containing the sorted list of decimal instruction offsets
     (relative to the start of the function) in CSV format, and uniquely identifies a variable
     '''
-    ref_instr_offsets = sorted([x.instr_addr - func_addr for x in var_refs])
+    ref_instr_offsets = sorted(set([x.instr_addr - func_addr for x in var_refs]))
     return ','.join(map(str, ref_instr_offsets))
 
 def build_var_ast_signature(fdecl:FunctionDecl, varname:str) -> str:
