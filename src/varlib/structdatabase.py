@@ -37,6 +37,9 @@ class StructDatabase:
         self._next_sid = 0
 
         # this is generated on-the-fly for individual structs (see StructType.flatten())
+        self.reset_flattened_structs()
+
+    def reset_flattened_structs(self):
         self.flattened_structs:Dict[int, StructDefinition] = {}    # mirror of structs_by_id - maps SAME sids to their flattened defs
 
     @property
