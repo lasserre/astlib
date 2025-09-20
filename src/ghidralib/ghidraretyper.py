@@ -139,12 +139,17 @@ class GhidraRetyper:
         if self.check_conflicts(struct_subset, union_subset):
             raise Exception('ERROR: multiple definitions for the same composite')
 
+        ghidra_sid_to_dtype = {x.key: x for x in self.dtype_mgr.allComposites} if overwrite_existing else {}
+        struct_defs_and_paths = []
+
         # Iterate through all composites and create empty structs/unions
         for sid, sdef in struct_subset.items():
             # Define empty struct
-            new_struct = StructureDataType(self.struct_category_path, sdef.name, 0)
+            category_path = ghidra_sid_to_dtype[sid].categoryPath if overwrite_existing and sid in ghidra_sid_to_dtype else self.struct_category_path
+            new_struct = StructureDataType(category_path, sdef.name, 0)
             # CLS NOTE: Dylan had "None" as the 2nd argument instead of "overwrite_existing"
             self.add_to_data_type_manager(new_struct, overwrite_existing)
+            struct_defs_and_paths.append((sdef, category_path))
 
         for uid, udef in union_subset.items():
             # Define empty union
@@ -152,9 +157,10 @@ class GhidraRetyper:
             self.add_to_data_type_manager(new_union, overwrite_existing)
 
         # Iterate through composites again and add definitions
-        for sid, sdef in struct_subset.items():
+        #for sid, sdef in struct_subset.items():
+        for sdef, category_path in struct_defs_and_paths:
             # Define internal struct members
-            self.define_struct_type(sdef, overwrite_existing)
+            self.define_struct_type(sdef, category_path, overwrite_existing)
         for uid, udef in union_subset.items():
             # Define internal union members
             self.define_union_type(udef, overwrite_existing)
@@ -185,9 +191,9 @@ class GhidraRetyper:
         # Add data type to dtm with appropriate conflict resolutin set
         return self.dtype_mgr.addDataType(dtype, conflict_resolution_policy)
 
-    def define_struct_type(self, sdef:datatype.StructDefinition, overwrite_existing:bool=False):
-        ghidra_dtype_path = f'{self.struct_category_path}/{sdef.name}'
-        new_struct = self.dtype_mgr.getDataType(ghidra_dtype_path)      # retrieve the existing empty struct
+    def define_struct_type(self, sdef:datatype.StructDefinition, category_path:CategoryPath, overwrite_existing:bool=False):
+        #ghidra_dtype_path = f'{self.struct_category_path}/{sdef.name}'
+        new_struct = self.dtype_mgr.getDataType(category_path, sdef.name)      # retrieve the existing empty struct
 
         # insert fields into structure IN OFFSET ORDER or it won't work correctly!
         for offset in sorted(sdef.layout.keys()):
