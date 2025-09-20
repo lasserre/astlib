@@ -82,13 +82,13 @@ class AstDecompiler:
     def nonthunk_functions(self) -> List[Function]:
         return [f for f in self.func_mgr.getFunctions(True) if not f.isThunk()]
 
-    def export_program_struct_db(self, progress_bar:bool=False) -> StructDatabase:
+    def export_program_struct_db(self, progress_bar:bool=False, tqdm_leave:bool=True) -> StructDatabase:
         '''
         Export the structure database defining the composite types for this program
         '''
-        return export_ghidra_types_to_sdb(self.datatype_mgr, progress_bar)
+        return export_ghidra_types_to_sdb(self.datatype_mgr, progress_bar, tqdm_leave)
 
-    def export_program_decompilation(self, status_msg:str='Decompiling program', funclist:List[Function]=None, sdb:StructDatabase=None) -> ProgramDecompilation:
+    def export_program_decompilation(self, status_msg:str='Decompiling program', funclist:List[Function]=None, sdb:StructDatabase=None, tqdm_leave:bool=True) -> ProgramDecompilation:
         '''
         Export all non-thunk functions in the program (or the functions from funclist if specified)
         as well as the StructureDatabase for the program, and return the result as a
@@ -100,7 +100,7 @@ class AstDecompiler:
         '''
         funclist = funclist if funclist else self.nonthunk_functions
         sdb = self.export_program_struct_db() if sdb is None else sdb
-        get_funcs = tqdm(funclist, desc=status_msg) if status_msg else funclist
+        get_funcs = tqdm(funclist, desc=status_msg, leave=tqdm_leave) if status_msg else funclist
         return ProgramDecompilation([self.decompile(f, sdb) for f in get_funcs], sdb)
 
     @staticmethod

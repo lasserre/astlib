@@ -43,13 +43,13 @@ def update_ghidra_struct_in_sdb(dtmgr:DataTypeManager, struct_name:str, sdb:Stru
     sdb.build_sids_by_name()
     return dtype.sid
 
-def export_ghidra_types_to_sdb(dtmgr:DataTypeManager, progress_bar:bool=True) -> StructDatabase:
+def export_ghidra_types_to_sdb(dtmgr:DataTypeManager, progress_bar:bool=True, tqdm_leave:bool=True) -> StructDatabase:
     # Ghidra already has unique ids - just construct structs/unions_by_id manually
     sdb = StructDatabase()
 
     all_composites = list(dtmgr.getAllComposites())
     if progress_bar:
-        all_composites = tqdm(all_composites, desc='Exporting structs/unions')
+        all_composites = tqdm(all_composites, desc='Exporting structs/unions', leave=tqdm_leave)
 
     for ghidra_type in all_composites:
         dtype = to_varlib_dtype(sdb, ghidra_type, ghidra_type.getLength())
