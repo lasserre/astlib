@@ -570,10 +570,13 @@ class MemberExpr(ASTNode):
                 return self.parent_struct.layout[self.offset].dtype
             elif self.has_fake_ghidra_fieldname:
                 return None     # this is not our fault! haha
-            # NOTE: we can remove this if we don't need to be this strict, but for now
+            # OLD NOTE: we can remove this if we don't need to be this strict, but for now
             # leaving it to help catch any preventable errors
-            # raise Exception
-            print(f'Valid parent struct but no entry for offset 0x{self.offset:x}')
+
+            # NEWER NOTE: we get more of these now because we run member type prediction
+            # after pruning on REMAINING members using "out-of-date" decompilations...(our targets for dtype prediction
+            # all exist, but sometimes their neighbor members have been pruned)
+            # print(f'Valid parent struct but no entry for offset 0x{self.offset:x}')
             return None
         elif self.parent_union:
             # have to match union field by name
