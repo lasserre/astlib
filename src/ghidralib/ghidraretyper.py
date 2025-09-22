@@ -241,10 +241,14 @@ class GhidraRetyper:
         # This function throws an exception when attempting to update type of unique variable with different size
         HighFunctionDBUtil.updateDBVariable(symbol, name, ghidra_dtype, SourceType.USER_DEFINED)
 
-    def set_globalvar_type(self, global_name:str, global_type:datatype.DataType, new_name:str=None):
+    def set_globalvar_type(self, global_name:str, global_type:datatype.DataType, new_name:str=None, nothrow:bool=False):
         symbol_matches = self.program.symbolTable.getGlobalSymbols(global_name)
         if not symbol_matches:
-            raise Exception(f'No matching global variables with name {global_name}')
+            msg = f'No matching global variables with name {global_name}'
+            if nothrow:
+                print(msg)
+                return  # fail w/o throwing - we don't care if it doesn't work sometimes
+            raise Exception(msg)
         elif len(symbol_matches) > 1:
             print(f'Warning: found {len(symbol_matches):,} symbols with the name {global_name} - taking the first one only')
 
