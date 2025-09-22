@@ -88,7 +88,7 @@ class GhidraRetyper:
         if '.conflict' in comps[sid].name:
             return True
         # Identify non-explicit conflicts by determining if name appears more than once
-        occurrences = [id for id, comp in comps.items() if comp.name == comps[sid].name]
+        occurrences = [x for x, comp in comps.items() if comp.name == comps[sid].name]
         if len(occurrences) > 1:
             return True
         # Otherwise, no conflicts
