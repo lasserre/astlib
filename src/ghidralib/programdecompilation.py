@@ -12,6 +12,20 @@ from typing import Dict, List
 from astlib import TranslationUnitDecl, astnode_from_dict, read_json_nothrow
 from varlib import StructDatabase
 
+# From Ghidra decompiler mods, ast.cc:5 in getValidCLanguageName()
+#
+# /**
+#  * Ghidra displays invalid C variable names in the decompiler window (like "file-local"),
+#  * but when I convert it to C using the flat API (DecompiledFunction.getC())
+#  * Ghidra first converts invalid names like this to valid C names (like "file_local")
+# */
+#
+# --> now I'm seeing the local_sym_dict has names like "file-local" while our exported names
+#     match Ghidra's getC() names (corrected). So make the local_sym_dict names valid C names
+#     to allow our lookups to work properly
+def to_valid_C_name(sym_name:str) -> str:
+    return ''.join([c if c.isalnum() else '_' for c in sym_name])
+
 class DecompiledFunction:
     '''
     Contains decompiled function outputs all in one place
@@ -33,6 +47,10 @@ class DecompiledFunction:
         Get dictionary of localSymbolMap from decompile results
         '''
         return dict(self.results.highFunction.localSymbolMap.nameToSymbolMap)
+
+    @property
+    def local_sym_dict_with_valid_varnames(self) -> Dict[str, 'HighSymbol']:
+        return {to_valid_C_name(k): v for k, v in self.local_sym_dict.items()}
 
     @property
     def address(self) -> int:
