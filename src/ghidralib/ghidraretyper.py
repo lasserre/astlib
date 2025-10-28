@@ -191,6 +191,13 @@ class GhidraRetyper:
         # Add data type to dtm with appropriate conflict resolutin set
         return self.dtype_mgr.addDataType(dtype, conflict_resolution_policy)
 
+    def remove_struct_type(self, struct_name:str, category_path:CategoryPath=None) -> bool:
+        if category_path is None:
+            category_path = self.struct_category_path
+
+        stype = self.dtype_mgr.getDataType(category_path, struct_name)
+        return self.dtype_mgr.remove(stype, ConsoleTaskMonitor())
+
     def define_struct_type(self, sdef:datatype.StructDefinition, category_path:CategoryPath, overwrite_existing:bool=False):
         #ghidra_dtype_path = f'{self.struct_category_path}/{sdef.name}'
         new_struct = self.dtype_mgr.getDataType(category_path, sdef.name)      # retrieve the existing empty struct
