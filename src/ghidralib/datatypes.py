@@ -50,9 +50,12 @@ def _stringdt_to_varlib(gdt:StringDataType, length:int, typedef_name:str=None):
         raise Exception(f'Unhandled string replacement type {gdt.getReplacementBaseType()}')
     return datatype.ArrayType(datatype.BuiltinType('char', False, True, 1), length)
 
-def _struct_to_varlib(sdb:StructDatabase, gdt:Structure, length:int, typedef_name:str=None):
+def struct_sid(gdt:Structure) -> int:
     # WOW...Ghidra uses multiple ids...thanks...
-    sid = gdt.key   # this matches the ids we export from decompiler
+    return gdt.key  # this matches the ids we export from decompiler
+
+def _struct_to_varlib(sdb:StructDatabase, gdt:Structure, length:int, typedef_name:str=None):
+    sid = struct_sid(gdt)
     return datatype.StructType(db=sdb, sid=sid, name=gdt.name)
 
 def _typedef_to_varlib(sdb:StructDatabase, gdt:TypeDef, length:int, typedef_name:str=None):

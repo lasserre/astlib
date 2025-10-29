@@ -36,7 +36,7 @@ from ghidra.util.task import ConsoleTaskMonitor
 # Caleb's stuff (astlib)
 from varlib import datatype, StructDatabase
 from varlib.datatype import StructDefinition
-from .export_types import update_ghidra_struct_in_sdb
+from .export_types import update_ghidra_struct_in_sdb, get_ghidra_sid
 
 # Normal python stuff
 from typing import Dict, List
@@ -115,6 +115,12 @@ class GhidraRetyper:
         '''
         return update_ghidra_struct_in_sdb(self.dtype_mgr, struct_name, sdb)
 
+    def get_ghidra_sid(self, struct_name:str) -> int:
+        '''
+        Returns the ghidra sid for this structure (assuming its name is unique) or None if it DNE
+        '''
+        return get_ghidra_sid(self.dtype_mgr, struct_name)
+
     def define_all_reference_types(self, sdb:StructDatabase, overwrite_existing:bool=False, subset_sids:List[int]=None):
         '''
         Define all of the structure and union types in the reference StructDatabase
@@ -175,9 +181,7 @@ class GhidraRetyper:
         '''
         orig_gdt = self.dtype_mgr.getDataType(orig_sid)
         new_gdt = self.dtype_mgr.getDataType(new_sid)
-        if new_gdt:
-            return self.dtype_mgr.replaceDataType(orig_gdt, new_gdt, update_category_path)
-        return None
+        return self.dtype_mgr.replaceDataType(orig_gdt, new_gdt, update_category_path) if new_gdt and orig_gdt else None
 
     def add_to_data_type_manager(self, dtype:DataType, overwrite_existing:bool=False) -> DataType:
         '''

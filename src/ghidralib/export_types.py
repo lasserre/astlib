@@ -10,7 +10,7 @@ from tqdm import tqdm
 from varlib import StructDatabase
 from varlib.datatype import StructType, UnionType, StructDefinition, UnionDefinition, StructLayout, UnionLayout, StructField
 from wildebeest.utils import show_progress
-from .datatypes import to_varlib_dtype
+from .datatypes import to_varlib_dtype, struct_sid
 
 def get_field(sdb:StructDatabase, dt_comp:ghidra.program.model.data.DataTypeComponent):
     return StructField(to_varlib_dtype(sdb, dt_comp.getDataType(), dt_comp.getLength()), dt_comp.getFieldName())
@@ -28,6 +28,13 @@ def get_union_layout(utype:ghidra.program.model.data.Union, sdb:StructDatabase) 
 def get_union_definition(utype:ghidra.program.model.data.Union, sdb:StructDatabase) -> UnionDefinition:
     ghidra_uid = utype.universalID.value    # save this since sids are DIFFERENT
     return UnionDefinition(utype.name, get_union_layout(utype, sdb), ghidra_uid=ghidra_uid)
+
+def get_ghidra_sid(dtmgr:DataTypeManager, struct_name:str) -> int:
+    '''
+    Returns the ghidra sid for this structure (assuming its name is unique) or None if it DNE
+    '''
+    matches = [x for x in dtmgr.allComposites if x.name == struct_name]
+    return struct_sid(matches[0]) if matches else None
 
 def update_ghidra_struct_in_sdb(dtmgr:DataTypeManager, struct_name:str, sdb:StructDatabase) -> int:
     '''
