@@ -47,6 +47,8 @@ class StructType(DataType):
     @property
     def layout(self) -> StructLayout:
         '''The member layout information for the structure'''
+        if self._db is None or self.sid not in self._db.structs_by_id:
+            return None
         return None if self.sid < 0 else self._db.structs_by_id[self.sid].layout
 
     @property
