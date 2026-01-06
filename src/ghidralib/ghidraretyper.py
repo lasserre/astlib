@@ -332,6 +332,21 @@ class GhidraRetyper:
 
     def convert_struct_dtype(self, dtype:datatype.StructType):
         # Generate path and find in program dtm
+        if not dtype.name:
+            # NOTE - sometimes the name is not present (maybe the _db handle got lost?), which means we can't
+            # use the dtype_path, but we may be able to find the type using its sid
+            # --> it may be better to always use sid, but this name issue RARELY happens so I'm working around it
+            # for now since I don't have time to re-test all the other cases I know are working right now
+
+            ghidra_dtype = self.dtype_mgr.getDataType(dtype.sid)
+            if ghidra_dtype and isinstance(ghidra_dtype, TypeDef):
+                ghidra_dtype = ghidra_dtype.baseDataType
+
+            if not ghidra_dtype:
+                raise Exception(f'No structure name for sid {dtype.sid}')
+
+            return ghidra_dtype  # we found it using sid, so just return it now
+
         ghidra_dtype_path = f'{self.struct_category_path}/{dtype.name}'
         ghidra_dtype = self.dtype_mgr.getDataType(ghidra_dtype_path)
 
