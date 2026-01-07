@@ -35,7 +35,7 @@ from ghidra.util.task import ConsoleTaskMonitor
 
 # Caleb's stuff (astlib)
 from varlib import datatype, StructDatabase
-from varlib.datatype import StructDefinition
+from varlib.datatype import StructDefinition, BuiltinType
 from .export_types import update_ghidra_struct_in_sdb, get_ghidra_sid
 
 # Normal python stuff
