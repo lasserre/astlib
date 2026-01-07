@@ -19,7 +19,7 @@ from ghidra.program.model.data import FunctionDefinitionDataType
 from ghidra.program.model.data import StructureDataType, TypeDef
 from ghidra.program.model.data import UnionDataType
 from ghidra.program.model.data import PointerDataType
-from ghidra.program.model.data import ArrayDataType
+from ghidra.program.model.data import ArrayDataType, VoidDataType
 from ghidra.program.model.data import DataTypeManager, ProgramBasedDataTypeManager
 from ghidra.program.model.data import CategoryPath
 from ghidra.program.model.data import BuiltInDataTypeManager
@@ -376,7 +376,14 @@ class GhidraRetyper:
         element_type = self.convert_dtype(dtype.element_type)
         if element_type == None:
             raise Exception(f'ERROR: array cannot be created because {dtype.element_type.name} not found')
-        ghidra_dtype = ArrayDataType(element_type, dtype.num_elements, 0)
+
+        # NOTE - just ensuring we don't crash if this bug isn't fixed by my changes in variable_tracking.py
+        # (converting to ghidra-compatible data types)
+        if isinstance(element_type, VoidDataType):
+            print(f'WARNING: found void[] in GhidraRetyper -- manually converting to uchar[]')
+            element_type = self.convert_dtype(BuiltinType.from_standard_name('uchar'))
+
+        ghidra_dtype = ArrayDataType(element_type, dtype.num_elements, -1)
         return ghidra_dtype
 
     def convert_pointer_dtype(self, dtype:datatype.DataType):
