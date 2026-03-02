@@ -44,16 +44,16 @@ def decompile_all(export_folder:Path, host:str, repo:str, folder:str, binaryName
 
         with GhidraCheckoutProgram(proj, bin_file) as co:
             sdb_file = export_folder/f'{binaryName}.sdb'
-            print(f'Exporting all Ghidra data types to {sdb_file.name}...')
+            print(f'Exporting all Ghidra data types to {sdb_file.name}...', flush=True)
             sdb = export_ghidra_types_to_sdb(co.program.dataTypeManager)
             sdb.to_json(sdb_file)
 
             with AstDecompiler(co.program, bid, timeout_sec=timeout_sec) as decompiler:
                 nonthunks = co.decompiler.nonthunk_functions
 
-                print(f'Exporting function asts...')
+                print(f'Exporting function asts...', flush=True)
 
-                for i, func in show_progress(enumerate(nonthunks), desc=bin_file.name, total=len(nonthunks)):
+                for i, func in show_progress(enumerate(nonthunks), desc=bin_file.name, total=len(nonthunks), progress_period=25):
                     if max_funcs > -1 and i >= max_funcs:
                         break
 
